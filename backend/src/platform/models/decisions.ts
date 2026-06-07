@@ -22,13 +22,25 @@ export interface DecisionOutcome {
 export function buttonToDecision(button: Button): RefereeDecision {
   switch (button) {
     case 'white':
-      return { decision: 'good', cards: { red: false, blue: false, yellow: false } };
+      return {
+        decision: 'good',
+        cards: { red: false, blue: false, yellow: false },
+      };
     case 'red':
-      return { decision: 'bad', cards: { red: true, blue: false, yellow: false } };
+      return {
+        decision: 'bad',
+        cards: { red: true, blue: false, yellow: false },
+      };
     case 'blue':
-      return { decision: 'bad', cards: { red: false, blue: true, yellow: false } };
+      return {
+        decision: 'bad',
+        cards: { red: false, blue: true, yellow: false },
+      };
     case 'yellow':
-      return { decision: 'bad', cards: { red: false, blue: false, yellow: true } };
+      return {
+        decision: 'bad',
+        cards: { red: false, blue: false, yellow: true },
+      };
     default:
       throw new Error(`Invalid vote button: ${button}`);
   }

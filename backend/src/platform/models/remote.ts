@@ -73,11 +73,11 @@ export class Remote {
       throw new Error('Only spare remotes can be reconfigured');
     }
     if (targetRole === 'spare') {
-      throw new Error('Cannot configure spare as spare');
+      throw new Error(`Target role must be one of: left, right, chief`);
     }
     this.role = targetRole;
     this.isSpare = false;
-    this.hasClockButton = targetRole === 'chief';
+    // hasClockButton is a hardware property — preserved regardless of new role
   }
 
   pressButton(buttonName: Button): void {

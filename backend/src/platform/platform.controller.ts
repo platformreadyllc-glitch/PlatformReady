@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Delete,
-  Param,
-  Body,
-} from '@nestjs/common';
+import { Controller, Get, Post, Delete, Param, Body } from '@nestjs/common';
 import { PlatformService } from './platform.service';
 import { CreatePlatformDto } from './dto/create-platform.dto';
 import { RegisterRemoteDto } from './dto/register-remote.dto';
@@ -48,7 +41,10 @@ export class PlatformController {
   }
 
   @Post(':id/clock')
-  pressClockButton(@Param('id') id: string, @Body() body: { remoteId: string }) {
+  pressClockButton(
+    @Param('id') id: string,
+    @Body() body: { remoteId: string },
+  ) {
     return this.platformService.pressClockButton(id, body.remoteId);
   }
 

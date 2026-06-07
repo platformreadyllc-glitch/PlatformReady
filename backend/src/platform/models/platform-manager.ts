@@ -46,9 +46,10 @@ export class PlatformManager {
   }
 
   startGlobalBreak(durationSeconds: number): void {
+    const startTime = performance.now() / 1000;
     for (const platform of this._platforms.values()) {
       platform.clock.configureBreak(durationSeconds);
-      platform.clock.start();
+      platform.clock.start(startTime);
     }
   }
 

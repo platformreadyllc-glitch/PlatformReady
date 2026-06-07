@@ -1,4 +1,4 @@
-import { Role, Button, ACTIVE_ROLES } from './enums';
+import { Role, Button, ACTIVE_ROLES, VALID_ROLES } from './enums';
 import { Remote } from './remote';
 import { PlatformClock } from './platform-clock';
 import { determineDecisionOutcome, DecisionOutcome } from './decisions';
@@ -56,20 +56,31 @@ export class Platform {
       active?: boolean;
     } = {},
   ): Remote {
+    if (!VALID_ROLES.has(role)) {
+      throw new Error(
+        `Invalid role: ${role}. Must be one of: left, right, chief, spare`,
+      );
+    }
+
     const totalCount = this.activeRemotes.size + this.inactiveRemotes.size;
     if (totalCount >= MAX_TOTAL_REMOTES) {
-      throw new Error(`Platform ${this.platformId} already has ${MAX_TOTAL_REMOTES} remotes`);
+      throw new Error(
+        `Platform ${this.platformId} already has ${MAX_TOTAL_REMOTES} remotes`,
+      );
     }
 
     const isSpare = options.isSpare ?? role === 'spare';
     const active = options.active ?? !isSpare;
 
     if (active && this.activeRemotes.size >= MAX_ACTIVE_REMOTES) {
-      throw new Error('Cannot have more than 3 active remotes');
+      throw new Error(
+        `Platform ${this.platformId} already has 3 active remotes`,
+      );
     }
 
-    if (active && !isSpare) {
-      for (const remote of this.activeRemotes.values()) {
+    // Enforce role uniqueness across all remotes (active + inactive)
+    if (!isSpare) {
+      for (const remote of this.allRemotes().values()) {
         if (remote.role === role) {
           throw new Error(`Role ${role} is already assigned`);
         }
@@ -96,9 +107,12 @@ export class Platform {
   }
 
   removeRemote(remoteId: string): Remote {
-    const remote = this.activeRemotes.get(remoteId) ?? this.inactiveRemotes.get(remoteId);
+    const remote =
+      this.activeRemotes.get(remoteId) ?? this.inactiveRemotes.get(remoteId);
     if (!remote) {
-      throw new Error(`Remote ${remoteId} not found on platform ${this.platformId}`);
+      throw new Error(
+        `Remote ${remoteId} not found on platform ${this.platformId}`,
+      );
     }
     this.activeRemotes.delete(remoteId);
     this.inactiveRemotes.delete(remoteId);
@@ -106,15 +120,20 @@ export class Platform {
   }
 
   getRemote(remoteId: string): Remote {
-    const remote = this.activeRemotes.get(remoteId) ?? this.inactiveRemotes.get(remoteId);
+    const remote =
+      this.activeRemotes.get(remoteId) ?? this.inactiveRemotes.get(remoteId);
     if (!remote) {
-      throw new Error(`Remote ${remoteId} not found on platform ${this.platformId}`);
+      throw new Error(
+        `Remote ${remoteId} not found on platform ${this.platformId}`,
+      );
     }
     return remote;
   }
 
   hasRemote(remoteId: string): boolean {
-    return this.activeRemotes.has(remoteId) || this.inactiveRemotes.has(remoteId);
+    return (
+      this.activeRemotes.has(remoteId) || this.inactiveRemotes.has(remoteId)
+    );
   }
 
   castVote(remoteId: string, buttonName: Button): void {
@@ -180,21 +199,29 @@ export class Platform {
     this._decisionReadyAt = null;
   }
 
-  substituteSpare(targetRole: Role): void {
-    const spare = Array.from(this.inactiveRemotes.values()).find((r) => r.isSpare);
+  substituteSpare(targetRole: Role): Remote {
+    if (!ACTIVE_ROLES.has(targetRole)) {
+      throw new Error(`Target role must be one of: left, right, chief`);
+    }
+
+    const spare = Array.from(this.inactiveRemotes.values()).find(
+      (r) => r.isSpare,
+    );
     if (!spare) {
-      throw new Error('No spare remote available');
+      throw new Error('No spare remote available — key: spare');
     }
 
     const currentActive = Array.from(this.activeRemotes.values()).find(
       (r) => r.role === targetRole,
     );
-    if (currentActive) {
-      this.deactivateRemote(currentActive.remoteId);
+    if (!currentActive) {
+      throw new Error(`No active remote found for role: ${targetRole}`);
     }
+    this.deactivateRemote(currentActive.remoteId);
 
     spare.configureSpareAs(targetRole);
     this.activateRemote(spare.remoteId);
+    return spare;
   }
 
   handleClockButton(remoteId: string, atTime?: number): void {
@@ -225,7 +252,10 @@ export class Platform {
     return this.determineOutcome(true, t);
   }
 
-  determineOutcome(requireDelay: boolean = false, atTime?: number): DecisionOutcome {
+  determineOutcome(
+    requireDelay: boolean = false,
+    atTime?: number,
+  ): DecisionOutcome {
     const t = atTime ?? now();
     if (requireDelay && !this.readyForAutoDecision(t)) {
       throw new Error('Decision delay has not elapsed yet');

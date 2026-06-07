@@ -43,9 +43,7 @@ export class LiftingCastService {
 
   private async post(endpoint: string, body: object): Promise<void> {
     try {
-      await firstValueFrom(
-        this.http.post(`${this.baseUrl}/${endpoint}`, body),
-      );
+      await firstValueFrom(this.http.post(`${this.baseUrl}/${endpoint}`, body));
     } catch (e) {
       throw new InternalServerErrorException(
         `LiftingCast API error on ${endpoint}: ${(e as Error).message}`,
