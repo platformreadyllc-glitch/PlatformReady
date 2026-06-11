@@ -12,6 +12,7 @@ interface PlatformConfig {
   name: string
   sessionCount: number
   liftingCastPlatformId: string
+  active: boolean
 }
 
 interface DayConfig {
@@ -41,6 +42,7 @@ function buildEmptyDays(numDays: number, numPlatforms: number): DayConfig[] {
       name: '',
       sessionCount: 1,
       liftingCastPlatformId: '',
+      active: true,
     })),
   }))
 }
@@ -76,7 +78,12 @@ export default function MeetSetup() {
       setNumDays(config.numDays)
       setNumPlatforms(config.numPlatforms)
       setPassword(config.liftingCastPassword)
-      setDays(config.days)
+      setDays(
+        config.days.map((day) => ({
+          ...day,
+          platforms: day.platforms.map((p) => ({ ...p, active: p.active ?? true })),
+        }))
+      )
     } catch {
       // ignore malformed data
     }
@@ -96,6 +103,7 @@ export default function MeetSetup() {
               name: existingPlatform?.name ?? '',
               sessionCount: existingPlatform?.sessionCount ?? 1,
               liftingCastPlatformId: existingPlatform?.liftingCastPlatformId ?? '',
+              active: existingPlatform?.active ?? true,
             }
           }),
         }
@@ -257,11 +265,17 @@ export default function MeetSetup() {
                   type="number"
                   min={1}
                   value={platform.sessionCount}
-                  onChange={(e) =>
-                    days.forEach((_, di) =>
-                      updatePlatform(di, pi, { sessionCount: Number(e.target.value) })
+                  onChange={(e) => {
+                    const value = Number(e.target.value)
+                    setDays((prev) =>
+                      prev.map((day) => ({
+                        ...day,
+                        platforms: day.platforms.map((p, i) =>
+                          i === pi ? { ...p, sessionCount: value } : p
+                        ),
+                      }))
                     )
-                  }
+                  }}
                 />
               </div>
             </div>
@@ -289,16 +303,32 @@ export default function MeetSetup() {
             </div>
 
             {day.platforms.map((platform, pi) => (
-              <div key={pi} className="flex flex-col gap-1.5">
-                <Label htmlFor={`lc-platform-id-${di}-${pi}`}>
-                  {platform.name || `Platform ${pi + 1}`} — LiftingCast Platform ID
-                </Label>
-                <Input
-                  id={`lc-platform-id-${di}-${pi}`}
-                  placeholder="Paste the platform ID from LiftingCast"
-                  value={platform.liftingCastPlatformId}
-                  onChange={(e) => updatePlatform(di, pi, { liftingCastPlatformId: e.target.value })}
-                />
+              <div key={pi} className="flex flex-col gap-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-gray-300"
+                    checked={platform.active}
+                    onChange={(e) => updatePlatform(di, pi, { active: e.target.checked })}
+                  />
+                  <span className="text-sm font-medium text-gray-700">
+                    {platform.name || `Platform ${pi + 1}`}
+                  </span>
+                </label>
+
+                {platform.active && (
+                  <div className="flex flex-col gap-1.5 pl-6">
+                    <Label htmlFor={`lc-platform-id-${di}-${pi}`}>
+                      LiftingCast Platform ID
+                    </Label>
+                    <Input
+                      id={`lc-platform-id-${di}-${pi}`}
+                      placeholder="Paste the platform ID from LiftingCast"
+                      value={platform.liftingCastPlatformId}
+                      onChange={(e) => updatePlatform(di, pi, { liftingCastPlatformId: e.target.value })}
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </CardContent>
