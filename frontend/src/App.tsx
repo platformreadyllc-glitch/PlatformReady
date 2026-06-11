@@ -3,17 +3,17 @@ import MeetSetup from '@/pages/MeetSetup'
 
 function Layout() {
   return (
-    <div className="flex h-screen bg-gray-50">
-      <nav className="w-56 shrink-0 bg-white border-r border-gray-200 flex flex-col gap-1 p-4">
-        <span className="text-lg font-semibold text-gray-900 mb-4">PlatformReady</span>
+    <div className="flex h-screen bg-background">
+      <nav className="w-56 shrink-0 bg-surface border-r border-border flex flex-col gap-1 p-4">
+        <span className="text-lg font-semibold text-primary mb-4">PlatformReady</span>
         <NavLink
           to="/"
           end
           className={({ isActive }) =>
             `px-3 py-2 rounded-md text-sm font-medium transition-colors ${
               isActive
-                ? 'bg-gray-100 text-gray-900'
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                ? 'bg-slate-700 text-primary'
+                : 'text-secondary hover:bg-slate-700/50 hover:text-primary'
             }`
           }
         >
@@ -24,8 +24,8 @@ function Layout() {
           className={({ isActive }) =>
             `px-3 py-2 rounded-md text-sm font-medium transition-colors ${
               isActive
-                ? 'bg-gray-100 text-gray-900'
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                ? 'bg-slate-700 text-primary'
+                : 'text-secondary hover:bg-slate-700/50 hover:text-primary'
             }`
           }
         >
@@ -36,8 +36,8 @@ function Layout() {
           className={({ isActive }) =>
             `px-3 py-2 rounded-md text-sm font-medium transition-colors ${
               isActive
-                ? 'bg-gray-100 text-gray-900'
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                ? 'bg-slate-700 text-primary'
+                : 'text-secondary hover:bg-slate-700/50 hover:text-primary'
             }`
           }
         >
@@ -53,7 +53,7 @@ function Layout() {
 
 function Placeholder({ name }: { name: string }) {
   return (
-    <div className="text-gray-500 text-sm">
+    <div className="text-secondary text-sm">
       {name} — coming soon
     </div>
   )

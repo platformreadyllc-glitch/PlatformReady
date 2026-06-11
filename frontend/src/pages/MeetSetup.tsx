@@ -161,7 +161,7 @@ export default function MeetSetup() {
 
   return (
     <form onSubmit={handleSave} className="flex flex-col gap-6 max-w-2xl">
-      <h1 className="text-xl font-semibold text-gray-900">Meet Setup</h1>
+      <h1 className="text-xl font-semibold text-primary">Meet Setup</h1>
 
       {/* ------------------------------------------------------------------ */}
       {/* Section 1: Meet basics                                              */}
@@ -215,7 +215,7 @@ export default function MeetSetup() {
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="lc-password">LiftingCast password</Label>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-secondary">
               Publish the meet in LiftingCast first — the password is set during publishing.
             </p>
             <Input
@@ -307,11 +307,11 @@ export default function MeetSetup() {
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
-                    className="h-4 w-4 rounded border-gray-300"
+                    className="h-4 w-4 rounded border-border bg-background accent-accent"
                     checked={platform.active}
                     onChange={(e) => updatePlatform(di, pi, { active: e.target.checked })}
                   />
-                  <span className="text-sm font-medium text-gray-700">
+                  <span className="text-sm font-medium text-primary">
                     {platform.name || `Platform ${pi + 1}`}
                   </span>
                 </label>
