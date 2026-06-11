@@ -136,7 +136,7 @@ export default function MeetSetup() {
     )
   }
 
-  function handleSave(e: React.FormEvent) {
+  function handleSave(e: { preventDefault(): void }) {
     e.preventDefault()
     const config: MeetConfig = {
       name,
@@ -237,11 +237,17 @@ export default function MeetSetup() {
                   id={`platform-name-${pi}`}
                   placeholder={`e.g. Platform ${String.fromCharCode(65 + pi)}`}
                   value={platform.name}
-                  onChange={(e) =>
-                    days.forEach((_, di) =>
-                      updatePlatform(di, pi, { name: e.target.value })
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setDays((prev) =>
+                      prev.map((day) => ({
+                        ...day,
+                        platforms: day.platforms.map((p, i) =>
+                          i === pi ? { ...p, name: value } : p
+                        ),
+                      }))
                     )
-                  }
+                  }}
                 />
               </div>
               <div className="flex flex-col gap-1.5">
