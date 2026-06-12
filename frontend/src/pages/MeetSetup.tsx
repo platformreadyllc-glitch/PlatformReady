@@ -338,7 +338,7 @@ export default function MeetSetup() {
               <Label htmlFor={`lc-meet-id-${di}`}>LiftingCast Meet ID</Label>
               <Input
                 id={`lc-meet-id-${di}`}
-                placeholder="Paste the meet ID from LiftingCast"
+                placeholder="e.g. abc123def (from liftingcast.com/meets/…)"
                 value={day.liftingCastMeetId}
                 onChange={(e) => updateDayMeetId(di, e.target.value)}
               />
@@ -372,7 +372,7 @@ export default function MeetSetup() {
                     <div className="flex items-center gap-2 mt-0.5">
                       <Button
                         type="button"
-                        variant="outline"
+                        variant="default"
                         size="sm"
                         disabled={
                           testStatus[`${di}-${pi}`] === 'loading' ||
