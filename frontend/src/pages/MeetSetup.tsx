@@ -67,6 +67,15 @@ export default function MeetSetup() {
   const [days, setDays] = useState<DayConfig[]>(() => buildEmptyDays(1, 1))
   const [saved, setSaved] = useState(false)
 
+  type TestState = 'idle' | 'loading' | 'success' | 'error'
+  const [testStatus, setTestStatus] = useState<Record<string, TestState>>({})
+  const [testErrors, setTestErrors] = useState<Record<string, string>>({})
+
+  function resetAllTestStatuses() {
+    setTestStatus({})
+    setTestErrors({})
+  }
+
   // Load saved config from localStorage on first render
   useEffect(() => {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -127,6 +136,7 @@ export default function MeetSetup() {
     setDays((prev) =>
       prev.map((day, i) => (i === dayIndex ? { ...day, liftingCastMeetId: value } : day))
     )
+    resetAllTestStatuses()
   }
 
   function updatePlatform(dayIndex: number, platformIndex: number, patch: Partial<PlatformConfig>) {
@@ -142,6 +152,38 @@ export default function MeetSetup() {
             }
       )
     )
+    if ('liftingCastPlatformId' in patch) {
+      resetAllTestStatuses()
+    }
+  }
+
+  async function handleTestConnection(dayIndex: number, platformIndex: number) {
+    const key = `${dayIndex}-${platformIndex}`
+    const day = days[dayIndex]
+    const platform = day.platforms[platformIndex]
+    setTestStatus((s) => ({ ...s, [key]: 'loading' }))
+    try {
+      const res = await fetch('/api/liftingcast/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          meetId: day.liftingCastMeetId,
+          platformId: platform.liftingCastPlatformId,
+          password,
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setTestStatus((s) => ({ ...s, [key]: 'success' }))
+        setTimeout(() => setTestStatus((s) => ({ ...s, [key]: 'idle' })), 3000)
+      } else {
+        setTestErrors((e) => ({ ...e, [key]: data.error ?? 'Connection failed' }))
+        setTestStatus((s) => ({ ...s, [key]: 'error' }))
+      }
+    } catch {
+      setTestErrors((e) => ({ ...e, [key]: 'Network error' }))
+      setTestStatus((s) => ({ ...s, [key]: 'error' }))
+    }
   }
 
   function handleSave(e: { preventDefault(): void }) {
@@ -223,7 +265,7 @@ export default function MeetSetup() {
               type="password"
               placeholder="LiftingCast meet password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => { setPassword(e.target.value); resetAllTestStatuses() }}
             />
           </div>
         </CardContent>
@@ -327,6 +369,28 @@ export default function MeetSetup() {
                       value={platform.liftingCastPlatformId}
                       onChange={(e) => updatePlatform(di, pi, { liftingCastPlatformId: e.target.value })}
                     />
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={
+                          testStatus[`${di}-${pi}`] === 'loading' ||
+                          !day.liftingCastMeetId ||
+                          !platform.liftingCastPlatformId ||
+                          !password
+                        }
+                        onClick={() => handleTestConnection(di, pi)}
+                      >
+                        {testStatus[`${di}-${pi}`] === 'loading' ? 'Testing…' : 'Test connection'}
+                      </Button>
+                      {testStatus[`${di}-${pi}`] === 'success' && (
+                        <span className="text-sm text-green-500">Connected</span>
+                      )}
+                      {testStatus[`${di}-${pi}`] === 'error' && (
+                        <span className="text-sm text-red-500">{testErrors[`${di}-${pi}`]}</span>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
