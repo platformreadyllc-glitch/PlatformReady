@@ -5,9 +5,10 @@ type Theme = 'midnight' | 'studio' | 'light'
 const THEMES: Theme[] = ['midnight', 'studio', 'light']
 
 export function useTheme() {
-  const [theme, setTheme] = useState<Theme>(
-    () => (localStorage.getItem('theme') as Theme) ?? 'midnight'
-  )
+  const [theme, setTheme] = useState<Theme>(() => {
+    const stored = localStorage.getItem('theme') as Theme
+    return THEMES.includes(stored) ? stored : 'midnight'
+  })
 
   useEffect(() => {
     const root = document.documentElement

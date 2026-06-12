@@ -10,17 +10,21 @@
   --text-secondary: #94a3b8;
   --accent: #b0bec9;
   --accent-hover: #94a3b8;
+  --nav-active: #334155;
+  --nav-hover: #263044;
 }
 
-/* Studio — VS Code-style dark */
+/* Studio — near-black dark blue-gray */
 :root.theme-studio {
-  --background: #1e1e1e;
-  --surface: #252526;
-  --border: #3e3e3e;
-  --text-primary: #d4d4d4;
-  --text-secondary: #858585;
-  --accent: #b0bec9;
-  --accent-hover: #94a3b8;
+  --background: #010409;
+  --surface: #0d1117;
+  --border: #1e2d3d;
+  --text-primary: #e4e4e4;
+  --text-secondary: #6b7f96;
+  --accent: #8b9aab;
+  --accent-hover: #6b7a8a;
+  --nav-active: #1e2d3d;
+  --nav-hover: #111c28;
 }
 
 /* Light */
@@ -32,6 +36,8 @@
   --text-secondary: #64748b;
   --accent: #64748b;
   --accent-hover: #475569;
+  --nav-active: #e2e8f0;
+  --nav-hover: #f1f5f9;
 }
 
 @theme inline {
@@ -42,6 +48,8 @@
   --color-secondary: var(--text-secondary);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
+  --color-nav-active: var(--nav-active);
+  --color-nav-hover: var(--nav-hover);
 }
 
 body {

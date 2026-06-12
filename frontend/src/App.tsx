@@ -3,10 +3,17 @@ import { BrowserRouter, NavLink, Outlet, Route, Routes } from 'react-router-dom'
 import { useTheme } from '@/hooks/useTheme'
 import MeetSetup from '@/pages/MeetSetup'
 
-const THEME_META = {
+const THEMES = ['midnight', 'studio', 'light'] as const
+type Theme = typeof THEMES[number]
+
+const THEME_META: Record<Theme, { icon: React.ReactNode; label: string }> = {
   midnight: { icon: <Moon size={16} />, label: 'Midnight' },
   studio:   { icon: <Monitor size={16} />, label: 'Studio' },
   light:    { icon: <Sun size={16} />, label: 'Light' },
+}
+
+function nextTheme(t: Theme): Theme {
+  return THEMES[(THEMES.indexOf(t) + 1) % THEMES.length]
 }
 
 function Layout() {
@@ -22,8 +29,8 @@ function Layout() {
           className={({ isActive }) =>
             `px-3 py-2 rounded-md text-sm font-medium transition-colors ${
               isActive
-                ? 'bg-slate-700 text-primary'
-                : 'text-secondary hover:bg-slate-700/50 hover:text-primary'
+                ? 'bg-nav-active text-primary'
+                : 'text-secondary hover:bg-nav-hover hover:text-primary'
             }`
           }
         >
@@ -34,8 +41,8 @@ function Layout() {
           className={({ isActive }) =>
             `px-3 py-2 rounded-md text-sm font-medium transition-colors ${
               isActive
-                ? 'bg-slate-700 text-primary'
-                : 'text-secondary hover:bg-slate-700/50 hover:text-primary'
+                ? 'bg-nav-active text-primary'
+                : 'text-secondary hover:bg-nav-hover hover:text-primary'
             }`
           }
         >
@@ -46,8 +53,8 @@ function Layout() {
           className={({ isActive }) =>
             `px-3 py-2 rounded-md text-sm font-medium transition-colors ${
               isActive
-                ? 'bg-slate-700 text-primary'
-                : 'text-secondary hover:bg-slate-700/50 hover:text-primary'
+                ? 'bg-nav-active text-primary'
+                : 'text-secondary hover:bg-nav-hover hover:text-primary'
             }`
           }
         >
@@ -55,11 +62,11 @@ function Layout() {
         </NavLink>
         <button
           onClick={cycleTheme}
-          className="mt-auto flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-secondary hover:bg-slate-700/50 hover:text-primary transition-colors"
-          aria-label="Cycle theme"
+          className="mt-auto flex items-center justify-center w-9 h-9 rounded-md text-secondary hover:bg-nav-hover hover:text-primary transition-colors"
+          aria-label={`Switch to ${THEME_META[nextTheme(theme)].label} theme`}
+          title={`Switch to ${THEME_META[nextTheme(theme)].label}`}
         >
-          {THEME_META[theme].icon}
-          {THEME_META[theme].label}
+          {THEME_META[nextTheme(theme)].icon}
         </button>
       </nav>
       <main className="flex-1 overflow-auto p-6">
