@@ -17,6 +17,7 @@ interface PlatformConfig {
 
 interface DayConfig {
   liftingCastMeetId: string
+  liftingCastPassword: string
   platforms: PlatformConfig[]
 }
 
@@ -26,6 +27,7 @@ interface MeetConfig {
   numDays: number
   numPlatforms: number
   liftingCastPassword: string
+  perDayPasswords: boolean
   days: DayConfig[]
 }
 
@@ -38,6 +40,7 @@ const STORAGE_KEY = 'platformready_meet'
 function buildEmptyDays(numDays: number, numPlatforms: number): DayConfig[] {
   return Array.from({ length: numDays }, () => ({
     liftingCastMeetId: '',
+    liftingCastPassword: '',
     platforms: Array.from({ length: numPlatforms }, () => ({
       name: '',
       sessionCount: 1,
@@ -64,6 +67,7 @@ export default function MeetSetup() {
   const [numDays, setNumDays] = useState(1)
   const [numPlatforms, setNumPlatforms] = useState(1)
   const [password, setPassword] = useState('')
+  const [perDayPasswords, setPerDayPasswords] = useState(false)
   const [days, setDays] = useState<DayConfig[]>(() => buildEmptyDays(1, 1))
   const [saved, setSaved] = useState(false)
 
@@ -89,9 +93,11 @@ export default function MeetSetup() {
       setNumDays(config.numDays)
       setNumPlatforms(config.numPlatforms)
       setPassword(config.liftingCastPassword)
+      setPerDayPasswords(config.perDayPasswords ?? false)
       setDays(
         config.days.map((day) => ({
           ...day,
+          liftingCastPassword: day.liftingCastPassword ?? '',
           platforms: day.platforms.map((p) => ({ ...p, active: p.active ?? true })),
         }))
       )
@@ -108,6 +114,7 @@ export default function MeetSetup() {
         const existingDay = prev[di]
         return {
           liftingCastMeetId: existingDay?.liftingCastMeetId ?? '',
+          liftingCastPassword: existingDay?.liftingCastPassword ?? '',
           platforms: Array.from({ length: nextPlatforms }, (_, pi) => {
             const existingPlatform = existingDay?.platforms[pi]
             return {
@@ -134,11 +141,40 @@ export default function MeetSetup() {
     resizeDays(numDays, clamped)
   }
 
+  function handlePerDayPasswordsChange(checked: boolean) {
+    if (checked) {
+      setDays((prev) => prev.map((day) => ({ ...day, liftingCastPassword: password })))
+    }
+    setPerDayPasswords(checked)
+    resetAllTestStatuses()
+  }
+
   function updateDayMeetId(dayIndex: number, value: string) {
     setDays((prev) =>
       prev.map((day, i) => (i === dayIndex ? { ...day, liftingCastMeetId: value } : day))
     )
     resetAllTestStatuses()
+  }
+
+  function updateDayPassword(dayIndex: number, value: string) {
+    setDays((prev) =>
+      prev.map((day, i) => (i === dayIndex ? { ...day, liftingCastPassword: value } : day))
+    )
+    setTestStatus((s) => {
+      const next = { ...s }
+      days[dayIndex].platforms.forEach((_, pi) => { delete next[`${dayIndex}-${pi}`] })
+      return next
+    })
+    setTestErrors((e) => {
+      const next = { ...e }
+      days[dayIndex].platforms.forEach((_, pi) => { delete next[`${dayIndex}-${pi}`] })
+      return next
+    })
+    setPlatformNames((n) => {
+      const next = { ...n }
+      days[dayIndex].platforms.forEach((_, pi) => { delete next[`${dayIndex}-${pi}`] })
+      return next
+    })
   }
 
   function updatePlatform(dayIndex: number, platformIndex: number, patch: Partial<PlatformConfig>) {
@@ -163,6 +199,7 @@ export default function MeetSetup() {
     const key = `${dayIndex}-${platformIndex}`
     const day = days[dayIndex]
     const platform = day.platforms[platformIndex]
+    const effectivePassword = perDayPasswords ? day.liftingCastPassword : password
     setTestStatus((s) => ({ ...s, [key]: 'loading' }))
     try {
       const res = await fetch('/api/liftingcast/test-connection', {
@@ -171,7 +208,7 @@ export default function MeetSetup() {
         body: JSON.stringify({
           meetId: day.liftingCastMeetId,
           platformId: platform.liftingCastPlatformId,
-          password,
+          password: effectivePassword,
         }),
       })
       const data = await res.json()
@@ -197,6 +234,7 @@ export default function MeetSetup() {
       numDays,
       numPlatforms,
       liftingCastPassword: password,
+      perDayPasswords,
       days,
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config))
@@ -258,19 +296,31 @@ export default function MeetSetup() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="lc-password">LiftingCast password</Label>
-            <p className="text-xs text-secondary">
-              Publish the meet in LiftingCast first — the password is set during publishing.
-            </p>
-            <Input
-              id="lc-password"
-              type="password"
-              placeholder="LiftingCast meet password"
-              value={password}
-              onChange={(e) => { setPassword(e.target.value); resetAllTestStatuses() }}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-border bg-background accent-accent"
+              checked={perDayPasswords}
+              onChange={(e) => handlePerDayPasswordsChange(e.target.checked)}
             />
-          </div>
+            <span className="text-sm text-primary">Use different password for each day</span>
+          </label>
+
+          {!perDayPasswords && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="lc-password">LiftingCast password</Label>
+              <p className="text-xs text-secondary">
+                Publish the meet in LiftingCast first — the password is set during publishing.
+              </p>
+              <Input
+                id="lc-password"
+                type="password"
+                placeholder="LiftingCast meet password"
+                value={password}
+                onChange={(e) => { setPassword(e.target.value); resetAllTestStatuses() }}
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -347,6 +397,19 @@ export default function MeetSetup() {
               />
             </div>
 
+            {perDayPasswords && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor={`lc-password-${di}`}>LiftingCast password</Label>
+                <Input
+                  id={`lc-password-${di}`}
+                  type="password"
+                  placeholder="LiftingCast meet password"
+                  value={day.liftingCastPassword}
+                  onChange={(e) => updateDayPassword(di, e.target.value)}
+                />
+              </div>
+            )}
+
             {day.platforms.map((platform, pi) => (
               <div key={pi} className="flex flex-col gap-2">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -381,7 +444,8 @@ export default function MeetSetup() {
                           testStatus[`${di}-${pi}`] === 'loading' ||
                           !day.liftingCastMeetId ||
                           !platform.liftingCastPlatformId ||
-                          !password
+                          (!perDayPasswords && !password) ||
+                          (perDayPasswords && !day.liftingCastPassword)
                         }
                         onClick={() => handleTestConnection(di, pi)}
                       >
