@@ -47,7 +47,7 @@ export class LiftingCastService {
     await this.post(baseUrl, 'reset_clock', { password });
   }
 
-  async testConnection(dto: TestConnectionDto): Promise<{ success: boolean; error?: string }> {
+  async testConnection(dto: TestConnectionDto): Promise<{ success: boolean; platformName?: string; error?: string }> {
     try {
       const sessionRes = await firstValueFrom(
         this.http.post(
@@ -72,16 +72,15 @@ export class LiftingCastService {
       const platformsRes = await firstValueFrom(
         this.http.get(`https://liftingcast.com/api/meets/${dto.meetId}/platforms`),
       );
-      const ids: string[] = (platformsRes.data?.docs ?? []).map((p: any) => p._id);
-      if (!ids.includes(dto.platformId)) {
+      const matched = (platformsRes.data?.docs ?? []).find((p: any) => p._id === dto.platformId);
+      if (!matched) {
         return { success: false, error: 'Platform ID not found in this meet' };
       }
+      return { success: true, platformName: matched.name as string };
     } catch (err: any) {
       console.error('[testConnection] platforms error', err.response?.status, err.response?.data ?? err.message);
       return { success: false, error: 'Could not fetch platform list' };
     }
-
-    return { success: true };
   }
 
   private async post(baseUrl: string, endpoint: string, body: object): Promise<void> {

@@ -70,10 +70,12 @@ export default function MeetSetup() {
   type TestState = 'idle' | 'loading' | 'success' | 'error'
   const [testStatus, setTestStatus] = useState<Record<string, TestState>>({})
   const [testErrors, setTestErrors] = useState<Record<string, string>>({})
+  const [platformNames, setPlatformNames] = useState<Record<string, string>>({})
 
   function resetAllTestStatuses() {
     setTestStatus({})
     setTestErrors({})
+    setPlatformNames({})
   }
 
   // Load saved config from localStorage on first render
@@ -174,6 +176,7 @@ export default function MeetSetup() {
       })
       const data = await res.json()
       if (data.success) {
+        setPlatformNames((n) => ({ ...n, [key]: data.platformName ?? '' }))
         setTestStatus((s) => ({ ...s, [key]: 'success' }))
         setTimeout(() => setTestStatus((s) => ({ ...s, [key]: 'idle' })), 3000)
       } else {
@@ -385,7 +388,9 @@ export default function MeetSetup() {
                         {testStatus[`${di}-${pi}`] === 'loading' ? 'Testing…' : 'Test connection'}
                       </Button>
                       {testStatus[`${di}-${pi}`] === 'success' && (
-                        <span className="text-sm text-green-500">Connected</span>
+                        <span className="text-sm text-green-500">
+                          Connected — {platformNames[`${di}-${pi}`]}
+                        </span>
                       )}
                       {testStatus[`${di}-${pi}`] === 'error' && (
                         <span className="text-sm text-red-500">{testErrors[`${di}-${pi}`]}</span>
