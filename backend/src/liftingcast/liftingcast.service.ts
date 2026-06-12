@@ -3,6 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { SetLightsDto } from './dto/set-lights.dto';
+import { TestConnectionDto } from './dto/test-connection.dto';
 
 @Injectable()
 export class LiftingCastService {
@@ -44,6 +45,40 @@ export class LiftingCastService {
   async resetClock(): Promise<void> {
     const { baseUrl, password } = this.credentials;
     await this.post(baseUrl, 'reset_clock', { password });
+  }
+
+  async testConnection(dto: TestConnectionDto): Promise<{ success: boolean; error?: string }> {
+    try {
+      const sessionRes = await firstValueFrom(
+        this.http.post(
+          'https://couchdb.liftingcast.com/_session',
+          { name: dto.meetId, password: dto.password },
+          { headers: { 'Content-Type': 'application/json', Accept: 'application/json' } },
+        ),
+      );
+      if (!sessionRes.data?.ok) {
+        return { success: false, error: 'Invalid meet ID or password' };
+      }
+    } catch (err: any) {
+      if (err.response?.status === 401) {
+        return { success: false, error: 'Invalid meet ID or password' };
+      }
+      return { success: false, error: 'Could not reach LiftingCast' };
+    }
+
+    try {
+      const platformsRes = await firstValueFrom(
+        this.http.get(`https://liftingcast.com/api/meets/${dto.meetId}/platforms`),
+      );
+      const ids: string[] = (platformsRes.data?.docs ?? []).map((p: any) => p._id);
+      if (!ids.includes(dto.platformId)) {
+        return { success: false, error: 'Platform ID not found in this meet' };
+      }
+    } catch {
+      return { success: false, error: 'Could not fetch platform list' };
+    }
+
+    return { success: true };
   }
 
   private async post(baseUrl: string, endpoint: string, body: object): Promise<void> {
