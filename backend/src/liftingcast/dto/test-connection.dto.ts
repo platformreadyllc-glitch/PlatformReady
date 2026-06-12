@@ -1,5 +1,12 @@
+import { IsString } from 'class-validator';
+
 export class TestConnectionDto {
-  meetId: string;
-  platformId: string;
-  password: string;
+  @IsString()
+  meetId!: string;
+
+  @IsString()
+  platformId!: string;
+
+  @IsString()
+  password!: string;
 }

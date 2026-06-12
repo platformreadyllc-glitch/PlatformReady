@@ -52,18 +52,20 @@ export class LiftingCastService {
       const sessionRes = await firstValueFrom(
         this.http.post(
           'https://couchdb.liftingcast.com/_session',
-          { name: dto.meetId, password: dto.password },
-          { headers: { 'Content-Type': 'application/json', Accept: 'application/json' } },
+          `name=${encodeURIComponent(dto.meetId)}&password=${encodeURIComponent(dto.password)}`,
+          { headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' } },
         ),
       );
       if (!sessionRes.data?.ok) {
         return { success: false, error: 'Invalid meet ID or password' };
       }
     } catch (err: any) {
-      if (err.response?.status === 401) {
+      const status = err.response?.status;
+      console.error('[testConnection] session error', status, err.response?.data ?? err.message);
+      if (status === 401) {
         return { success: false, error: 'Invalid meet ID or password' };
       }
-      return { success: false, error: 'Could not reach LiftingCast' };
+      return { success: false, error: `Could not reach LiftingCast (status ${status ?? err.code ?? err.message})` };
     }
 
     try {
@@ -74,7 +76,8 @@ export class LiftingCastService {
       if (!ids.includes(dto.platformId)) {
         return { success: false, error: 'Platform ID not found in this meet' };
       }
-    } catch {
+    } catch (err: any) {
+      console.error('[testConnection] platforms error', err.response?.status, err.response?.data ?? err.message);
       return { success: false, error: 'Could not fetch platform list' };
     }
 
