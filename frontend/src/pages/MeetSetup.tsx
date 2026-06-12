@@ -178,7 +178,7 @@ export default function MeetSetup() {
       if (data.success) {
         setPlatformNames((n) => ({ ...n, [key]: data.platformName ?? '' }))
         setTestStatus((s) => ({ ...s, [key]: 'success' }))
-        setTimeout(() => setTestStatus((s) => ({ ...s, [key]: 'idle' })), 3000)
+        setTimeout(() => setTestStatus((s) => ({ ...s, [key]: 'idle' })), 5000)
       } else {
         setTestErrors((e) => ({ ...e, [key]: data.error ?? 'Connection failed' }))
         setTestStatus((s) => ({ ...s, [key]: 'error' }))

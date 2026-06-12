@@ -8,8 +8,22 @@
   --border: #334155;
   --text-primary: #f1f5f9;
   --text-secondary: #94a3b8;
-  --accent: #b0bec9;
+  /* different accent color sets */
+  /* light gray w/dark text */
+  /* --accent: #b0bec9;
   --accent-hover: #94a3b8;
+  --accent-text: #0f172a; */
+
+  /* amber w/dark text */
+  /* --accent: #FFBF00;
+  --accent-hover: #94a3b8;
+  --accent-text: #0f172a; */
+
+  /* wine w/light text */
+  --accent: #80091b;
+  --accent-hover: #993a49;
+  --accent-text: #f1f5f9;
+
   --nav-active: #334155;
   --nav-hover: #263044;
 }
@@ -21,8 +35,18 @@
   --border: #1e2d3d;
   --text-primary: #e4e4e4;
   --text-secondary: #6b7f96;
-  --accent: #8b9aab;
-  --accent-hover: #6b7a8a;
+
+  /* different accent color sets */
+  /* github green w/light text */
+  /* --accent: #2da44e;
+  --accent-hover: #2c974b;
+  --accent-text: #ffffff; */
+
+  /* amber w/dark text */
+  --accent: #feb204;
+  --accent-hover: #ffd22b;
+  --accent-text: #0f172a;
+
   --nav-active: #1e2d3d;
   --nav-hover: #111c28;
 }
@@ -34,8 +58,16 @@
   --border: #e2e8f0;
   --text-primary: #0f172a;
   --text-secondary: #64748b;
-  --accent: #64748b;
-  --accent-hover: #475569;
+  /* different accent color sets */
+  /* dark blue w/light text */
+  /* --accent: #1e293b;
+  --accent-hover: #0f172a;
+  --accent-text: #ffffff; */
+
+  /* slate gray w/light text */
+  --accent: #1e293b;
+  --accent-hover: #334155;
+  --accent-text: #ffffff;
   --nav-active: #e2e8f0;
   --nav-hover: #f1f5f9;
 }
@@ -48,6 +80,7 @@
   --color-secondary: var(--text-secondary);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
+  --color-accent-text: var(--accent-text);
   --color-nav-active: var(--nav-active);
   --color-nav-hover: var(--nav-hover);
 }

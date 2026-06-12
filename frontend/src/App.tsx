@@ -8,8 +8,8 @@ type Theme = typeof THEMES[number]
 
 const THEME_META: Record<Theme, { icon: React.ReactNode; label: string }> = {
   midnight: { icon: <Moon size={16} />, label: 'Midnight' },
-  studio:   { icon: <Monitor size={16} />, label: 'Studio' },
-  light:    { icon: <Sun size={16} />, label: 'Light' },
+  studio: { icon: <Monitor size={16} />, label: 'Studio' },
+  light: { icon: <Sun size={16} />, label: 'Light' },
 }
 
 function nextTheme(t: Theme): Theme {
@@ -22,15 +22,14 @@ function Layout() {
   return (
     <div className="flex h-screen bg-background">
       <nav className="w-56 shrink-0 bg-surface border-r border-border flex flex-col gap-1 p-4">
-        <span className="text-lg font-semibold text-primary mb-4">PlatformReady</span>
+        <span className="text-lg font-semibold text-primary mb-4">Platform Ready</span>
         <NavLink
           to="/"
           end
           className={({ isActive }) =>
-            `px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-              isActive
-                ? 'bg-nav-active text-primary'
-                : 'text-secondary hover:bg-nav-hover hover:text-primary'
+            `px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive
+              ? 'bg-nav-active text-primary'
+              : 'text-secondary hover:bg-nav-hover hover:text-primary'
             }`
           }
         >
@@ -39,10 +38,9 @@ function Layout() {
         <NavLink
           to="/platform/1"
           className={({ isActive }) =>
-            `px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-              isActive
-                ? 'bg-nav-active text-primary'
-                : 'text-secondary hover:bg-nav-hover hover:text-primary'
+            `px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive
+              ? 'bg-nav-active text-primary'
+              : 'text-secondary hover:bg-nav-hover hover:text-primary'
             }`
           }
         >
@@ -51,10 +49,9 @@ function Layout() {
         <NavLink
           to="/controls"
           className={({ isActive }) =>
-            `px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-              isActive
-                ? 'bg-nav-active text-primary'
-                : 'text-secondary hover:bg-nav-hover hover:text-primary'
+            `px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive
+              ? 'bg-nav-active text-primary'
+              : 'text-secondary hover:bg-nav-hover hover:text-primary'
             }`
           }
         >
@@ -64,7 +61,7 @@ function Layout() {
           onClick={cycleTheme}
           className="mt-auto flex items-center justify-center w-9 h-9 rounded-md text-secondary hover:bg-nav-hover hover:text-primary transition-colors"
           aria-label={`Switch to ${THEME_META[nextTheme(theme)].label} theme`}
-          title={`Switch to ${THEME_META[nextTheme(theme)].label}`}
+          title={`Switch to ${THEME_META[nextTheme(theme)].label} theme`}
         >
           {THEME_META[nextTheme(theme)].icon}
         </button>
