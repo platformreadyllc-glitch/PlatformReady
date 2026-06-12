@@ -1,17 +1,24 @@
 import { useEffect, useState } from 'react'
 
+type Theme = 'midnight' | 'studio' | 'light'
+
+const THEMES: Theme[] = ['midnight', 'studio', 'light']
+
 export function useTheme() {
-  const [theme, setTheme] = useState<'light' | 'dark'>(
-    () => (localStorage.getItem('theme') as 'light' | 'dark') ?? 'dark'
+  const [theme, setTheme] = useState<Theme>(
+    () => (localStorage.getItem('theme') as Theme) ?? 'midnight'
   )
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark')
+    const root = document.documentElement
+    THEMES.forEach((t) => root.classList.remove(`theme-${t}`))
+    root.classList.add(`theme-${theme}`)
     localStorage.setItem('theme', theme)
   }, [theme])
 
-  return {
-    theme,
-    toggleTheme: () => setTheme((t) => (t === 'dark' ? 'light' : 'dark')),
+  function cycleTheme() {
+    setTheme((t) => THEMES[(THEMES.indexOf(t) + 1) % THEMES.length])
   }
+
+  return { theme, cycleTheme }
 }

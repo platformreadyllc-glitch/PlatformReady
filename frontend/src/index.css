@@ -1,16 +1,8 @@
 @import "tailwindcss";
 
-:root {
-  --background: #f8fafc;
-  --surface: #ffffff;
-  --border: #e2e8f0;
-  --text-primary: #0f172a;
-  --text-secondary: #64748b;
-  --accent: #64748b;
-  --accent-hover: #475569;
-}
-
-:root.dark {
+/* Midnight — dark navy (default + explicit class) */
+:root,
+:root.theme-midnight {
   --background: #0f172a;
   --surface: #1e293b;
   --border: #334155;
@@ -18,6 +10,28 @@
   --text-secondary: #94a3b8;
   --accent: #b0bec9;
   --accent-hover: #94a3b8;
+}
+
+/* Studio — VS Code-style dark */
+:root.theme-studio {
+  --background: #1e1e1e;
+  --surface: #252526;
+  --border: #3e3e3e;
+  --text-primary: #d4d4d4;
+  --text-secondary: #858585;
+  --accent: #b0bec9;
+  --accent-hover: #94a3b8;
+}
+
+/* Light */
+:root.theme-light {
+  --background: #f8fafc;
+  --surface: #ffffff;
+  --border: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --accent: #64748b;
+  --accent-hover: #475569;
 }
 
 @theme inline {
