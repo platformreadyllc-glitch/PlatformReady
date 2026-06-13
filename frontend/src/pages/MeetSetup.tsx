@@ -31,6 +31,8 @@ interface MeetConfig {
   days: DayConfig[]
 }
 
+type TestState = 'idle' | 'loading' | 'success' | 'error'
+
 const STORAGE_KEY = 'platformready_meet'
 
 // ---------------------------------------------------------------------------
@@ -71,7 +73,6 @@ export default function MeetSetup() {
   const [days, setDays] = useState<DayConfig[]>(() => buildEmptyDays(1, 1))
   const [saved, setSaved] = useState(false)
 
-  type TestState = 'idle' | 'loading' | 'success' | 'error'
   const [testStatus, setTestStatus] = useState<Record<string, TestState>>({})
   const [testErrors, setTestErrors] = useState<Record<string, string>>({})
   const [platformNames, setPlatformNames] = useState<Record<string, string>>({})
@@ -135,25 +136,9 @@ export default function MeetSetup() {
       // single-day → multi-day: promote day 0's password to the shared field
       setPassword(days[0]?.liftingCastPassword ?? password)
     } else if (numDays > 1 && clamped === 1 && !perDayPasswords) {
-      // multi-day → single-day: push shared password into day 0
-      setDays((prev) =>
-        Array.from({ length: 1 }, (_, di) => {
-          const existingDay = prev[di]
-          return {
-            liftingCastMeetId: existingDay?.liftingCastMeetId ?? '',
-            liftingCastPassword: password,
-            platforms: Array.from({ length: numPlatforms }, (_, pi) => {
-              const existingPlatform = existingDay?.platforms[pi]
-              return {
-                name: existingPlatform?.name ?? '',
-                sessionCount: existingPlatform?.sessionCount ?? 1,
-                liftingCastPlatformId: existingPlatform?.liftingCastPlatformId ?? '',
-                active: existingPlatform?.active ?? true,
-              }
-            }),
-          }
-        })
-      )
+      // multi-day → single-day: shrink to day 0, then inject shared password
+      resizeDays(1, numPlatforms)
+      setDays((prev) => [{ ...prev[0], liftingCastPassword: password }])
       setNumDays(clamped)
       resetAllTestStatuses()
       return
@@ -187,21 +172,14 @@ export default function MeetSetup() {
     setDays((prev) =>
       prev.map((day, i) => (i === dayIndex ? { ...day, liftingCastPassword: value } : day))
     )
-    setTestStatus((s) => {
-      const next = { ...s }
-      days[dayIndex].platforms.forEach((_, pi) => { delete next[`${dayIndex}-${pi}`] })
+    const clearDayKeys = <T extends Record<string, unknown>>(record: T): T => {
+      const next = { ...record }
+      for (let pi = 0; pi < numPlatforms; pi++) delete next[`${dayIndex}-${pi}`]
       return next
-    })
-    setTestErrors((e) => {
-      const next = { ...e }
-      days[dayIndex].platforms.forEach((_, pi) => { delete next[`${dayIndex}-${pi}`] })
-      return next
-    })
-    setPlatformNames((n) => {
-      const next = { ...n }
-      days[dayIndex].platforms.forEach((_, pi) => { delete next[`${dayIndex}-${pi}`] })
-      return next
-    })
+    }
+    setTestStatus(clearDayKeys)
+    setTestErrors(clearDayKeys)
+    setPlatformNames(clearDayKeys)
   }
 
   function updatePlatform(dayIndex: number, platformIndex: number, patch: Partial<PlatformConfig>) {
@@ -222,6 +200,26 @@ export default function MeetSetup() {
     }
   }
 
+  function updatePlatformName(platformIndex: number, value: string) {
+    setDays((prev) =>
+      prev.map((day) => ({
+        ...day,
+        platforms: day.platforms.map((p, i) => (i === platformIndex ? { ...p, name: value } : p)),
+      }))
+    )
+  }
+
+  function updatePlatformSessionCount(platformIndex: number, value: number) {
+    setDays((prev) =>
+      prev.map((day) => ({
+        ...day,
+        platforms: day.platforms.map((p, i) =>
+          i === platformIndex ? { ...p, sessionCount: value } : p
+        ),
+      }))
+    )
+  }
+
   async function handleTestConnection(dayIndex: number, platformIndex: number) {
     const key = `${dayIndex}-${platformIndex}`
     const day = days[dayIndex]
@@ -238,6 +236,7 @@ export default function MeetSetup() {
           password: effectivePassword,
         }),
       })
+      if (!res.ok) throw new Error(`Server error ${res.status}`)
       const data = await res.json()
       if (data.success) {
         setPlatformNames((n) => ({ ...n, [key]: data.platformName ?? '' }))
@@ -369,17 +368,7 @@ export default function MeetSetup() {
                   id={`platform-name-${pi}`}
                   placeholder={`e.g. Platform ${String.fromCharCode(65 + pi)}`}
                   value={platform.name}
-                  onChange={(e) => {
-                    const value = e.target.value
-                    setDays((prev) =>
-                      prev.map((day) => ({
-                        ...day,
-                        platforms: day.platforms.map((p, i) =>
-                          i === pi ? { ...p, name: value } : p
-                        ),
-                      }))
-                    )
-                  }}
+                  onChange={(e) => updatePlatformName(pi, e.target.value)}
                 />
               </div>
               <div className="flex flex-col gap-1.5">
@@ -389,17 +378,7 @@ export default function MeetSetup() {
                   type="number"
                   min={1}
                   value={platform.sessionCount}
-                  onChange={(e) => {
-                    const value = Number(e.target.value)
-                    setDays((prev) =>
-                      prev.map((day) => ({
-                        ...day,
-                        platforms: day.platforms.map((p, i) =>
-                          i === pi ? { ...p, sessionCount: value } : p
-                        ),
-                      }))
-                    )
-                  }}
+                  onChange={(e) => updatePlatformSessionCount(pi, Number(e.target.value))}
                 />
               </div>
             </div>
