@@ -131,6 +131,33 @@ export default function MeetSetup() {
 
   function handleNumDaysChange(value: number) {
     const clamped = Math.max(1, value)
+    if (numDays === 1 && clamped > 1) {
+      // single-day → multi-day: promote day 0's password to the shared field
+      setPassword(days[0]?.liftingCastPassword ?? password)
+    } else if (numDays > 1 && clamped === 1 && !perDayPasswords) {
+      // multi-day → single-day: push shared password into day 0
+      setDays((prev) =>
+        Array.from({ length: 1 }, (_, di) => {
+          const existingDay = prev[di]
+          return {
+            liftingCastMeetId: existingDay?.liftingCastMeetId ?? '',
+            liftingCastPassword: password,
+            platforms: Array.from({ length: numPlatforms }, (_, pi) => {
+              const existingPlatform = existingDay?.platforms[pi]
+              return {
+                name: existingPlatform?.name ?? '',
+                sessionCount: existingPlatform?.sessionCount ?? 1,
+                liftingCastPlatformId: existingPlatform?.liftingCastPlatformId ?? '',
+                active: existingPlatform?.active ?? true,
+              }
+            }),
+          }
+        })
+      )
+      setNumDays(clamped)
+      resetAllTestStatuses()
+      return
+    }
     setNumDays(clamped)
     resizeDays(clamped, numPlatforms)
   }
@@ -199,7 +226,7 @@ export default function MeetSetup() {
     const key = `${dayIndex}-${platformIndex}`
     const day = days[dayIndex]
     const platform = day.platforms[platformIndex]
-    const effectivePassword = perDayPasswords ? day.liftingCastPassword : password
+    const effectivePassword = (numDays === 1 || perDayPasswords) ? day.liftingCastPassword : password
     setTestStatus((s) => ({ ...s, [key]: 'loading' }))
     try {
       const res = await fetch('/api/liftingcast/test-connection', {
@@ -296,17 +323,19 @@ export default function MeetSetup() {
             </div>
           </div>
 
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-border bg-background accent-accent"
-              checked={perDayPasswords}
-              onChange={(e) => handlePerDayPasswordsChange(e.target.checked)}
-            />
-            <span className="text-sm text-primary">Use different password for each day</span>
-          </label>
+          {numDays > 1 && (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-border bg-background accent-accent"
+                checked={perDayPasswords}
+                onChange={(e) => handlePerDayPasswordsChange(e.target.checked)}
+              />
+              <span className="text-sm text-primary">Use different password for each day</span>
+            </label>
+          )}
 
-          {!perDayPasswords && (
+          {numDays > 1 && !perDayPasswords && (
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="lc-password">LiftingCast password</Label>
               <p className="text-xs text-secondary">
@@ -397,7 +426,7 @@ export default function MeetSetup() {
               />
             </div>
 
-            {perDayPasswords && (
+            {(perDayPasswords || numDays === 1) && (
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor={`lc-password-${di}`}>LiftingCast password</Label>
                 <Input
@@ -444,8 +473,7 @@ export default function MeetSetup() {
                           testStatus[`${di}-${pi}`] === 'loading' ||
                           !day.liftingCastMeetId ||
                           !platform.liftingCastPlatformId ||
-                          (!perDayPasswords && !password) ||
-                          (perDayPasswords && !day.liftingCastPassword)
+                          (numDays === 1 || perDayPasswords ? !day.liftingCastPassword : !password)
                         }
                         onClick={() => handleTestConnection(di, pi)}
                       >
