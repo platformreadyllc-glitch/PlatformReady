@@ -1,10 +1,7 @@
 import { Monitor, Moon, Sun } from 'lucide-react'
 import { BrowserRouter, NavLink, Outlet, Route, Routes } from 'react-router-dom'
-import { useTheme } from '@/hooks/useTheme'
+import { useTheme, THEMES, type Theme } from '@/hooks/useTheme'
 import MeetSetup from '@/pages/MeetSetup'
-
-const THEMES = ['midnight', 'studio', 'light'] as const
-type Theme = typeof THEMES[number]
 
 const THEME_META: Record<Theme, { icon: React.ReactNode; label: string }> = {
   midnight: { icon: <Moon size={16} />, label: 'Midnight' },
@@ -16,6 +13,11 @@ function nextTheme(t: Theme): Theme {
   return THEMES[(THEMES.indexOf(t) + 1) % THEMES.length]
 }
 
+const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+  `px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+    isActive ? 'bg-nav-active text-primary' : 'text-secondary hover:bg-nav-hover hover:text-primary'
+  }`
+
 function Layout() {
   const { theme, cycleTheme } = useTheme()
 
@@ -23,38 +25,13 @@ function Layout() {
     <div className="flex h-screen bg-background">
       <nav className="w-56 shrink-0 bg-surface border-r border-border flex flex-col gap-1 p-4">
         <span className="text-lg font-semibold text-primary mb-4">Platform Ready</span>
-        <NavLink
-          to="/"
-          end
-          className={({ isActive }) =>
-            `px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive
-              ? 'bg-nav-active text-primary'
-              : 'text-secondary hover:bg-nav-hover hover:text-primary'
-            }`
-          }
-        >
+        <NavLink to="/" end className={navLinkClass}>
           Meet Setup
         </NavLink>
-        <NavLink
-          to="/platform/1"
-          className={({ isActive }) =>
-            `px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive
-              ? 'bg-nav-active text-primary'
-              : 'text-secondary hover:bg-nav-hover hover:text-primary'
-            }`
-          }
-        >
+        <NavLink to="/platform/1" className={navLinkClass}>
           Platform View
         </NavLink>
-        <NavLink
-          to="/controls"
-          className={({ isActive }) =>
-            `px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive
-              ? 'bg-nav-active text-primary'
-              : 'text-secondary hover:bg-nav-hover hover:text-primary'
-            }`
-          }
-        >
+        <NavLink to="/controls" className={navLinkClass}>
           Controls
         </NavLink>
         <button

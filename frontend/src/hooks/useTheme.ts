@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 
-type Theme = 'midnight' | 'studio' | 'light'
-
-const THEMES: Theme[] = ['midnight', 'studio', 'light']
+export const THEMES = ['midnight', 'studio', 'light'] as const
+export type Theme = typeof THEMES[number]
 
 export function useTheme() {
   const [theme, setTheme] = useState<Theme>(() => {
