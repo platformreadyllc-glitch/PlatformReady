@@ -167,6 +167,7 @@ export default function PlatformView() {
       clearTimeout(resetTimer.current ?? undefined)
       setRevealed(false)
       setVotes(INITIAL_VOTES)
+      setClock(INITIAL_CLOCK)
     }
 
     function handleKeyDown(e: KeyboardEvent) {
