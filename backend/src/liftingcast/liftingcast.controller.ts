@@ -1,6 +1,7 @@
 import { Controller, Post, Body } from '@nestjs/common';
 import { LiftingCastService } from './liftingcast.service';
 import { SetLightsDto } from './dto/set-lights.dto';
+import { TestConnectionDto } from './dto/test-connection.dto';
 
 @Controller('liftingcast')
 export class LiftingCastController {
@@ -29,5 +30,10 @@ export class LiftingCastController {
   @Post('reset-clock')
   resetClock() {
     return this.liftingCastService.resetClock();
+  }
+
+  @Post('test-connection')
+  testConnection(@Body() dto: TestConnectionDto) {
+    return this.liftingCastService.testConnection(dto);
   }
 }
