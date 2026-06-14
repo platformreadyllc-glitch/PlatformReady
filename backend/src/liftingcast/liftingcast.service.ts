@@ -20,7 +20,9 @@ export class LiftingCastService {
 
   private get credentials() {
     const meetId = this.config.getOrThrow<string>('LIFTINGCAST_MEET_ID');
-    const platformId = this.config.getOrThrow<string>('LIFTINGCAST_PLATFORM_ID');
+    const platformId = this.config.getOrThrow<string>(
+      'LIFTINGCAST_PLATFORM_ID',
+    );
     const password = this.config.getOrThrow<string>('LIFTINGCAST_PASSWORD');
     return {
       password,
@@ -53,13 +55,20 @@ export class LiftingCastService {
     await this.post(baseUrl, 'reset_clock', { password });
   }
 
-  async testConnection(dto: TestConnectionDto): Promise<{ success: boolean; platformName?: string; error?: string }> {
+  async testConnection(
+    dto: TestConnectionDto,
+  ): Promise<{ success: boolean; platformName?: string; error?: string }> {
     try {
       const sessionRes = await firstValueFrom(
         this.http.post(
           'https://couchdb.liftingcast.com/_session',
           `name=${encodeURIComponent(dto.meetId)}&password=${encodeURIComponent(dto.password)}`,
-          { headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' } },
+          {
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              Accept: 'application/json',
+            },
+          },
         ),
       );
       if (!sessionRes.data?.ok) {
@@ -67,17 +76,26 @@ export class LiftingCastService {
       }
     } catch (err: unknown) {
       const status = isAxiosError(err) ? err.response?.status : undefined;
-      console.error('[testConnection] session error', status, isAxiosError(err) ? (err.response?.data ?? err.message) : err);
+      console.error(
+        '[testConnection] session error',
+        status,
+        isAxiosError(err) ? (err.response?.data ?? err.message) : err,
+      );
       if (status === 401) {
         return { success: false, error: 'Invalid meet ID or password' };
       }
       const detail = isAxiosError(err) ? (err.code ?? err.message) : 'unknown';
-      return { success: false, error: `Could not reach LiftingCast (status ${status ?? detail})` };
+      return {
+        success: false,
+        error: `Could not reach LiftingCast (status ${status ?? detail})`,
+      };
     }
 
     try {
       const platformsRes = await firstValueFrom(
-        this.http.get(`https://liftingcast.com/api/meets/${dto.meetId}/platforms`),
+        this.http.get(
+          `https://liftingcast.com/api/meets/${dto.meetId}/platforms`,
+        ),
       );
       const platforms: LiftingCastPlatform[] = platformsRes.data?.docs ?? [];
       const matched = platforms.find((p) => p._id === dto.platformId);
@@ -87,12 +105,20 @@ export class LiftingCastService {
       return { success: true, platformName: matched.name };
     } catch (err: unknown) {
       const status = isAxiosError(err) ? err.response?.status : undefined;
-      console.error('[testConnection] platforms error', status, isAxiosError(err) ? (err.response?.data ?? err.message) : err);
+      console.error(
+        '[testConnection] platforms error',
+        status,
+        isAxiosError(err) ? (err.response?.data ?? err.message) : err,
+      );
       return { success: false, error: 'Could not fetch platform list' };
     }
   }
 
-  private async post(baseUrl: string, endpoint: string, body: object): Promise<void> {
+  private async post(
+    baseUrl: string,
+    endpoint: string,
+    body: object,
+  ): Promise<void> {
     try {
       await firstValueFrom(this.http.post(`${baseUrl}/${endpoint}`, body));
     } catch (e) {
