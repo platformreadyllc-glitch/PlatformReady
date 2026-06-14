@@ -1,11 +1,11 @@
-import { IsString, IsOptional, IsBoolean } from 'class-validator';
-import { Role } from '../models/enums';
+import { IsIn, IsString, IsOptional, IsBoolean } from 'class-validator';
+import { Role, VALID_ROLES } from '../models/enums';
 
 export class RegisterRemoteDto {
   @IsString()
   remoteId: string;
 
-  @IsString()
+  @IsIn(Array.from(VALID_ROLES))
   role: Role;
 
   @IsOptional()
