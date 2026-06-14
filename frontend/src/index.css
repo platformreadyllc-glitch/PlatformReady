@@ -43,6 +43,18 @@
   --nav-hover: #f1f5f9;
 }
 
+/* Platform display — always renders in Studio palette regardless of the active theme */
+.platform-display {
+  --background: #010409;
+  --surface: #0d1117;
+  --border: #1e2d3d;
+  --text-primary: #e4e4e4;
+  --text-secondary: #6b7f96;
+  --accent: #feb204;
+  --accent-hover: #ffd22b;
+  --accent-text: #0f172a;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-surface: var(--surface);
