@@ -2,8 +2,14 @@ import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
+import { isAxiosError } from 'axios';
 import { SetLightsDto } from './dto/set-lights.dto';
 import { TestConnectionDto } from './dto/test-connection.dto';
+
+interface LiftingCastPlatform {
+  _id: string;
+  name: string;
+}
 
 @Injectable()
 export class LiftingCastService {
@@ -59,26 +65,29 @@ export class LiftingCastService {
       if (!sessionRes.data?.ok) {
         return { success: false, error: 'Invalid meet ID or password' };
       }
-    } catch (err: any) {
-      const status = err.response?.status;
-      console.error('[testConnection] session error', status, err.response?.data ?? err.message);
+    } catch (err: unknown) {
+      const status = isAxiosError(err) ? err.response?.status : undefined;
+      console.error('[testConnection] session error', status, isAxiosError(err) ? (err.response?.data ?? err.message) : err);
       if (status === 401) {
         return { success: false, error: 'Invalid meet ID or password' };
       }
-      return { success: false, error: `Could not reach LiftingCast (status ${status ?? err.code ?? err.message})` };
+      const detail = isAxiosError(err) ? (err.code ?? err.message) : 'unknown';
+      return { success: false, error: `Could not reach LiftingCast (status ${status ?? detail})` };
     }
 
     try {
       const platformsRes = await firstValueFrom(
         this.http.get(`https://liftingcast.com/api/meets/${dto.meetId}/platforms`),
       );
-      const matched = (platformsRes.data?.docs ?? []).find((p: any) => p._id === dto.platformId);
+      const platforms: LiftingCastPlatform[] = platformsRes.data?.docs ?? [];
+      const matched = platforms.find((p) => p._id === dto.platformId);
       if (!matched) {
         return { success: false, error: 'Platform ID not found in this meet' };
       }
-      return { success: true, platformName: matched.name as string };
-    } catch (err: any) {
-      console.error('[testConnection] platforms error', err.response?.status, err.response?.data ?? err.message);
+      return { success: true, platformName: matched.name };
+    } catch (err: unknown) {
+      const status = isAxiosError(err) ? err.response?.status : undefined;
+      console.error('[testConnection] platforms error', status, isAxiosError(err) ? (err.response?.data ?? err.message) : err);
       return { success: false, error: 'Could not fetch platform list' };
     }
   }
