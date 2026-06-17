@@ -49,9 +49,9 @@ const STORAGE_KEY = 'platformready_meet'
 
 // Key map: key → [role, button]
 const KEY_MAP: Record<string, [Role, VoteButton]> = {
-  q: ['left', 'white'],  w: ['left', 'red'],   e: ['left', 'blue'],   r: ['left', 'yellow'],
-  a: ['chief', 'white'], s: ['chief', 'red'],  d: ['chief', 'blue'],  f: ['chief', 'yellow'],
-  z: ['right', 'white'], x: ['right', 'red'],  c: ['right', 'blue'],  v: ['right', 'yellow'],
+  q: ['left', 'white'], w: ['left', 'red'], e: ['left', 'blue'], r: ['left', 'yellow'],
+  a: ['chief', 'white'], s: ['chief', 'red'], d: ['chief', 'blue'], f: ['chief', 'yellow'],
+  z: ['right', 'white'], x: ['right', 'red'], c: ['right', 'blue'], v: ['right', 'yellow'],
 }
 
 // ---------------------------------------------------------------------------
@@ -81,8 +81,9 @@ function RefereeLight({ label, vote, revealed }: { label: string; vote: VoteButt
 
   const stripClass =
     revealed && vote === 'blue' ? 'bg-blue-600' :
-    revealed && vote === 'yellow' ? 'bg-yellow-400' :
-    null
+      revealed && vote === 'yellow' ? 'bg-yellow-400' :
+        revealed && vote === 'red' ? 'bg-red-600' :
+          null
 
   return (
     <div className="flex flex-col items-center gap-4">
@@ -146,7 +147,7 @@ export default function PlatformView() {
   const [clock, setClock] = useState<ClockSnapshot>(INITIAL_CLOCK)
 
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const resetTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Clock countdown — ticks every 100ms while RUNNING
   useEffect(() => {
@@ -230,8 +231,8 @@ export default function PlatformView() {
   // ── Clock display ─────────────────────────────────────────────────────────
   const clockColorClass =
     clock.state === 'EXPIRED' ? 'text-red-500' :
-    clock.remaining <= 30    ? 'text-yellow-400' :
-    'text-primary'
+      clock.remaining <= 30 ? 'text-yellow-400' :
+        'text-primary'
 
   return (
     <div className="platform-display min-h-screen bg-background flex flex-col">
@@ -245,7 +246,7 @@ export default function PlatformView() {
       <div className="flex-1 flex flex-col items-center justify-center gap-20">
         {/* Referee lights: Left — Chief — Right */}
         <div className="flex items-start gap-24">
-          <RefereeLight label="Left"  vote={votes.left}  revealed={revealed} />
+          <RefereeLight label="Left" vote={votes.left} revealed={revealed} />
           <RefereeLight label="Chief" vote={votes.chief} revealed={revealed} />
           <RefereeLight label="Right" vote={votes.right} revealed={revealed} />
         </div>
