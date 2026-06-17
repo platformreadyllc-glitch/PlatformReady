@@ -68,6 +68,42 @@
   --color-nav-hover: var(--nav-hover);
 }
 
+@font-face {
+  font-family: 'DSEG7ClassicBold';
+  src: url('/fonts/DSEG7Classic-Bold.ttf') format('truetype');
+  font-weight: 700;
+}
+
+@font-face {
+  font-family: 'DSEG7ClassicLight';
+  src: url('/fonts/DSEG7Classic-Light.ttf') format('truetype');
+  font-weight: 700;
+}
+
+@font-face {
+  font-family: 'DSEG7ClassicRegular';
+  src: url('/fonts/DSEG7Classic-Regular.ttf') format('truetype');
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: 'DSEG7ModernBold';
+  src: url('/fonts/DSEG7Modern-Bold.ttf') format('truetype');
+  font-weight: 700;
+}
+
+@font-face {
+  font-family: 'DSEG7ModernLight';
+  src: url('/fonts/DSEG7Modern-Light.ttf') format('truetype');
+  font-weight: 700;
+}
+
+@font-face {
+  font-family: 'DSEG7ModernRegular';
+  src: url('/fonts/DSEG7Modern-Regular.ttf') format('truetype');
+  font-weight: 400;
+}
+
 body {
   background-color: var(--background);
   color: var(--text-primary);

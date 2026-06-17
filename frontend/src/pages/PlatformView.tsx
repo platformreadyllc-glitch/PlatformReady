@@ -49,9 +49,9 @@ const STORAGE_KEY = 'platformready_meet'
 
 // Key map: key → [role, button]
 const KEY_MAP: Record<string, [Role, VoteButton]> = {
-  q: ['left', 'white'],  w: ['left', 'red'],   e: ['left', 'blue'],   r: ['left', 'yellow'],
-  a: ['chief', 'white'], s: ['chief', 'red'],  d: ['chief', 'blue'],  f: ['chief', 'yellow'],
-  z: ['right', 'white'], x: ['right', 'red'],  c: ['right', 'blue'],  v: ['right', 'yellow'],
+  q: ['left', 'white'], w: ['left', 'red'], e: ['left', 'blue'], r: ['left', 'yellow'],
+  a: ['chief', 'white'], s: ['chief', 'red'], d: ['chief', 'blue'], f: ['chief', 'yellow'],
+  z: ['right', 'white'], x: ['right', 'red'], c: ['right', 'blue'], v: ['right', 'yellow'],
 }
 
 // ---------------------------------------------------------------------------
@@ -77,13 +77,13 @@ function dayLabel(startDate: string, index: number): string {
 
 function RefereeLight({ vote, revealed }: { vote: VoteButton | null; revealed: boolean }) {
   const voted = vote !== null
-  const CIRCLE = 'w-44 h-44 rounded-full'
+  const CIRCLE = 'w-100 h-100 rounded-full'
 
   const stripClass =
     revealed && vote === 'blue' ? 'bg-blue-600' :
-    revealed && vote === 'yellow' ? 'bg-yellow-400' :
-    revealed && vote === 'red' ? 'bg-red-600' :
-    null
+      revealed && vote === 'yellow' ? 'bg-yellow-400' :
+        revealed && vote === 'red' ? 'bg-red-600' :
+          null
 
   return (
     <div className="flex flex-col items-center gap-2">
@@ -141,7 +141,7 @@ export default function PlatformView() {
   const [clock, setClock] = useState<ClockSnapshot>(INITIAL_CLOCK)
 
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const resetTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Clock countdown — ticks every 100ms while RUNNING
   useEffect(() => {
@@ -225,8 +225,8 @@ export default function PlatformView() {
   // ── Clock display ─────────────────────────────────────────────────────────
   const clockColorClass =
     clock.state === 'EXPIRED' ? 'text-red-500' :
-    clock.remaining <= 30    ? 'text-yellow-400' :
-    'text-primary'
+      clock.remaining <= 30 ? 'text-yellow-400' :
+        'text-primary'
 
   return (
     <div className="platform-display min-h-screen bg-background flex flex-col">
@@ -240,20 +240,20 @@ export default function PlatformView() {
       <div className="flex-1 flex flex-col items-center justify-center gap-20">
         {/* Referee lights: Left — Chief — Right */}
         <div className="flex items-start gap-24">
-          <RefereeLight vote={votes.left}  revealed={revealed} />
+          <RefereeLight vote={votes.left} revealed={revealed} />
           <RefereeLight vote={votes.chief} revealed={revealed} />
           <RefereeLight vote={votes.right} revealed={revealed} />
         </div>
 
         {/* Clock */}
         <div className="flex flex-col items-center gap-3">
-          <span className={`text-[10rem] font-mono font-bold tabular-nums ${clockColorClass}`}>
+          <span className={`text-[18rem] [font-family:'DSEG7ClassicBold',monospace] font-bold tabular-nums ${clockColorClass}`}>
             {formatTime(clock.remaining)}
           </span>
 
           {clock.mode === 'BREAK' && clock.openingAttemptsOpen && clock.openingAttemptsRemaining !== null && (
             <div className="flex flex-col items-center gap-1 mt-6">
-              <span className="text-4xl font-mono font-bold tabular-nums text-red-500">
+              <span className="text-4xl font-Inter font-bold tabular-nums text-red-500">
                 {formatTime(clock.openingAttemptsRemaining)}
               </span>
               <span className="text-sm text-secondary uppercase tracking-widest">
