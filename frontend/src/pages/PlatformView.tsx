@@ -77,7 +77,7 @@ function dayLabel(startDate: string, index: number): string {
 
 function RefereeLight({ vote, revealed }: { vote: VoteButton | null; revealed: boolean }) {
   const voted = vote !== null
-  const CIRCLE = 'w-100 h-100 rounded-full'
+  const CIRCLE = 'w-[20vw] h-[20vw] rounded-full'
 
   const stripClass =
     revealed && vote === 'blue' ? 'bg-blue-600' :
@@ -100,8 +100,8 @@ function RefereeLight({ vote, revealed }: { vote: VoteButton | null; revealed: b
 
       {/* Secondary color strip for blue / yellow cards; spacer when absent */}
       {stripClass
-        ? <div className={`w-44 h-5 rounded-sm ${stripClass}`} />
-        : <div className="w-44 h-5" />
+        ? <div className={`w-[20vw] h-[1.5vw] rounded-sm ${stripClass}`} />
+        : <div className="w-[20vw] h-[1.5vw]" />
       }
     </div>
   )
@@ -237,9 +237,9 @@ export default function PlatformView() {
       </header>
 
       {/* Main display */}
-      <div className="flex-1 flex flex-col items-center justify-center gap-20">
+      <div className="flex-1 flex flex-col items-center justify-center gap-[6vh]">
         {/* Referee lights: Left — Chief — Right */}
-        <div className="flex items-start gap-24">
+        <div className="flex items-start gap-[5vw]">
           <RefereeLight vote={votes.left} revealed={revealed} />
           <RefereeLight vote={votes.chief} revealed={revealed} />
           <RefereeLight vote={votes.right} revealed={revealed} />
@@ -247,13 +247,13 @@ export default function PlatformView() {
 
         {/* Clock */}
         <div className="flex flex-col items-center gap-3">
-          <span className={`text-[18rem] [font-family:'DSEG7ClassicBold',monospace] font-bold tabular-nums ${clockColorClass}`}>
+          <span className={`text-[20vw] [font-family:'DSEG7ClassicBold',monospace] font-bold tabular-nums ${clockColorClass}`}>
             {formatTime(clock.remaining)}
           </span>
 
           {clock.mode === 'BREAK' && clock.openingAttemptsOpen && clock.openingAttemptsRemaining !== null && (
             <div className="flex flex-col items-center gap-1 mt-6">
-              <span className="text-4xl font-Inter font-bold tabular-nums text-red-500">
+              <span className="text-4xl [font-family:'Inter',sans-serif] font-bold tabular-nums text-red-500">
                 {formatTime(clock.openingAttemptsRemaining)}
               </span>
               <span className="text-sm text-secondary uppercase tracking-widest">
