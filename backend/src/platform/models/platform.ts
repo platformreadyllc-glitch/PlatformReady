@@ -1,4 +1,4 @@
-import { Role, Button, ACTIVE_ROLES, VALID_ROLES } from './enums';
+import { Role, Button, ACTIVE_ROLES, VALID_ROLES, ClockMode } from './enums';
 import { Remote } from './remote';
 import { PlatformClock } from './platform-clock';
 import { determineDecisionOutcome, DecisionOutcome } from './decisions';
@@ -143,6 +143,9 @@ export class Platform {
     }
     if (buttonName === 'clock') {
       throw new Error('Use handleClockButton for clock presses');
+    }
+    if (this.clock.mode === ClockMode.BREAK) {
+      throw new Error('Cannot cast votes during break');
     }
     remote.pressButton(buttonName);
 

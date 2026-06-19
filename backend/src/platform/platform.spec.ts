@@ -615,6 +615,14 @@ describe('Platform', () => {
     expect(platform.getRefereeVotes()['chief']).toBe('white');
   });
 
+  it('castVote throws during break mode', () => {
+    const platform = new Platform({ platformId: 'brk-vote-1' });
+    platform.registerRemote('left-1', 'left', { active: true });
+    platform.clock.configureBreak(600.0);
+    platform.clock.start();
+    expect(() => platform.castVote('left-1', 'white')).toThrow('break');
+  });
+
   it('serialize includes clock with correct shape', () => {
     const platform = new Platform({ platformId: 'clk6' });
     const data = platform.serialize();
