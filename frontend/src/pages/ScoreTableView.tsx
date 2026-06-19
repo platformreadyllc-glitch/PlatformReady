@@ -7,6 +7,7 @@ import {
   INITIAL_CLOCK,
   INITIAL_VOTES,
   KEY_MAP,
+  OPENER_LOCK_CUTOFF,
   STORAGE_KEY,
   type ClockSnapshot,
   type Role,
@@ -76,12 +77,13 @@ export default function ScoreTableView() {
 
   function startCountdown() {
     if (selectedMinutes === null) return
+    const duration = selectedMinutes * 60
     setClock({
       mode: 'BREAK',
       state: 'RUNNING',
-      remaining: selectedMinutes * 60,
-      openingAttemptsOpen: false,
-      openingAttemptsRemaining: null,
+      remaining: duration,
+      openingAttemptsOpen: duration > OPENER_LOCK_CUTOFF,
+      openingAttemptsRemaining: Math.max(0, duration - OPENER_LOCK_CUTOFF),
     })
     closePanel()
   }
@@ -92,7 +94,14 @@ export default function ScoreTableView() {
       setClock((prev) => {
         if (prev.state !== 'RUNNING') return prev
         const next = Math.max(0, prev.remaining - 0.1)
-        return { ...prev, remaining: next, state: next <= 0 ? 'EXPIRED' : 'RUNNING' }
+        const inBreak = prev.mode === 'BREAK'
+        return {
+          ...prev,
+          remaining: next,
+          state: next <= 0 ? 'EXPIRED' : 'RUNNING',
+          openingAttemptsOpen: inBreak ? next > OPENER_LOCK_CUTOFF : false,
+          openingAttemptsRemaining: inBreak ? Math.max(0, next - OPENER_LOCK_CUTOFF) : null,
+        }
       })
     }, 100)
     return () => clearInterval(interval)

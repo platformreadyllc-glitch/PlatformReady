@@ -23,6 +23,7 @@ export interface ClockSnapshot {
 }
 
 export const ACTIVE_DURATION = 60
+export const OPENER_LOCK_CUTOFF = 180  // openers lock when break has ≤ 3 min remaining
 
 export const INITIAL_CLOCK: ClockSnapshot = {
   mode: 'ACTIVE',

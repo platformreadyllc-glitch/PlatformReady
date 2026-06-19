@@ -7,6 +7,7 @@ import {
   INITIAL_CLOCK,
   INITIAL_VOTES,
   KEY_MAP,
+  OPENER_LOCK_CUTOFF,
   STORAGE_KEY,
   type ClockSnapshot,
   type Role,
@@ -52,7 +53,14 @@ export default function PlatformView() {
       setClock((prev) => {
         if (prev.state !== 'RUNNING') return prev
         const next = Math.max(0, prev.remaining - 0.1)
-        return { ...prev, remaining: next, state: next <= 0 ? 'EXPIRED' : 'RUNNING' }
+        const inBreak = prev.mode === 'BREAK'
+        return {
+          ...prev,
+          remaining: next,
+          state: next <= 0 ? 'EXPIRED' : 'RUNNING',
+          openingAttemptsOpen: inBreak ? next > OPENER_LOCK_CUTOFF : false,
+          openingAttemptsRemaining: inBreak ? Math.max(0, next - OPENER_LOCK_CUTOFF) : null,
+        }
       })
     }, 100)
     return () => clearInterval(interval)
