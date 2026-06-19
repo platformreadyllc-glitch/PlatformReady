@@ -8,10 +8,14 @@ import { Platform } from './models/platform';
 import { Button, Role } from './models/enums';
 import { CreatePlatformDto } from './dto/create-platform.dto';
 import { RegisterRemoteDto } from './dto/register-remote.dto';
+import { EnsurePlatformDto } from './dto/ensure-platform.dto';
+import { PlatformGateway } from './platform.gateway';
 
 @Injectable()
 export class PlatformService {
   private readonly manager = new PlatformManager();
+
+  constructor(private readonly gateway: PlatformGateway) {}
 
   createPlatform(dto: CreatePlatformDto): Platform {
     try {
@@ -22,6 +26,22 @@ export class PlatformService {
       });
       this.manager.addPlatform(platform);
       return platform;
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
+  }
+
+  ensurePlatform(dto: EnsurePlatformDto) {
+    if (this.manager.hasPlatform(dto.platformId)) {
+      return this.manager.getPlatform(dto.platformId).serialize();
+    }
+    try {
+      const platform = new Platform({ platformId: dto.platformId, name: dto.name });
+      this.manager.addPlatform(platform);
+      platform.registerRemote('kb-left', 'left' as Role);
+      platform.registerRemote('kb-chief', 'chief' as Role);
+      platform.registerRemote('kb-right', 'right' as Role);
+      return platform.serialize();
     } catch (e) {
       throw new BadRequestException((e as Error).message);
     }
@@ -67,6 +87,7 @@ export class PlatformService {
     try {
       platform.castVote(remoteId, button);
       const outcome = platform.tryDetermineOutcome();
+      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
       return { votes: platform.getRefereeVotes(), outcome: outcome ?? null };
     } catch (e) {
       throw new BadRequestException((e as Error).message);
@@ -77,16 +98,26 @@ export class PlatformService {
     const platform = this.getPlatform(platformId);
     try {
       platform.handleClockButton(remoteId);
+      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
       return platform.clock.serialize();
     } catch (e) {
       throw new BadRequestException((e as Error).message);
     }
   }
 
+  resetAttempt(platformId: string) {
+    const platform = this.getPlatform(platformId);
+    platform.resetVotes();
+    platform.clock.resetToActive();
+    this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+    return platform.serialize();
+  }
+
   substituteSpare(platformId: string, targetRole: Role) {
     const platform = this.getPlatform(platformId);
     try {
       platform.substituteSpare(targetRole);
+      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
       return platform.serialize();
     } catch (e) {
       throw new BadRequestException((e as Error).message);
@@ -96,7 +127,9 @@ export class PlatformService {
   startGlobalBreak(durationSeconds: number) {
     try {
       this.manager.startGlobalBreak(durationSeconds);
-      return this.manager.serializeAll();
+      const all = this.manager.serializeAll();
+      this.gateway.emitGlobalUpdate(all);
+      return all;
     } catch (e) {
       throw new BadRequestException((e as Error).message);
     }

@@ -5,6 +5,7 @@ import { RegisterRemoteDto } from './dto/register-remote.dto';
 import { CastVoteDto } from './dto/cast-vote.dto';
 import { SubstituteSpareDto } from './dto/substitute-spare.dto';
 import { StartGlobalBreakDto } from './dto/start-global-break.dto';
+import { EnsurePlatformDto } from './dto/ensure-platform.dto';
 
 @Controller('platforms')
 export class PlatformController {
@@ -13,6 +14,17 @@ export class PlatformController {
   @Get()
   listPlatforms() {
     return this.platformService.listPlatforms();
+  }
+
+  // Must be declared before /:id routes to avoid "ensure" being matched as an id
+  @Post('ensure')
+  ensurePlatform(@Body() dto: EnsurePlatformDto) {
+    return this.platformService.ensurePlatform(dto);
+  }
+
+  @Post('break')
+  startGlobalBreak(@Body() dto: StartGlobalBreakDto) {
+    return this.platformService.startGlobalBreak(dto.durationSeconds);
   }
 
   @Post()
@@ -53,8 +65,8 @@ export class PlatformController {
     return this.platformService.substituteSpare(id, dto.targetRole);
   }
 
-  @Post('break')
-  startGlobalBreak(@Body() dto: StartGlobalBreakDto) {
-    return this.platformService.startGlobalBreak(dto.durationSeconds);
+  @Post(':id/reset')
+  resetAttempt(@Param('id') id: string) {
+    return this.platformService.resetAttempt(id);
   }
 }
