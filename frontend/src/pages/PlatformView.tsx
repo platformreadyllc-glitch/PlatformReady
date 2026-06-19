@@ -1,115 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-
-// ---------------------------------------------------------------------------
-// Types (subset of MeetConfig — source of truth is MeetSetup.tsx)
-// ---------------------------------------------------------------------------
-
-interface StoredPlatform {
-  name: string
-  active: boolean
-}
-
-interface StoredMeetConfig {
-  startDate: string
-  days: Array<{ platforms: StoredPlatform[] }>
-}
-
-type VoteButton = 'white' | 'red' | 'blue' | 'yellow'
-type Role = 'left' | 'chief' | 'right'
-
-type ClockMode = 'ACTIVE' | 'BREAK'
-type ClockState = 'IDLE' | 'RUNNING' | 'EXPIRED'
-
-interface ClockSnapshot {
-  mode: ClockMode
-  state: ClockState
-  remaining: number
-  openingAttemptsOpen: boolean
-  openingAttemptsRemaining: number | null
-}
-
-const ACTIVE_DURATION = 60
-
-const INITIAL_CLOCK: ClockSnapshot = {
-  mode: 'ACTIVE',
-  state: 'IDLE',
-  remaining: ACTIVE_DURATION,
-  openingAttemptsOpen: false,
-  openingAttemptsRemaining: null,
-}
-
-const INITIAL_VOTES: Record<Role, VoteButton | null> = {
-  left: null,
-  chief: null,
-  right: null,
-}
-
-const STORAGE_KEY = 'platformready_meet'
-
-// Key map: key → [role, button]
-const KEY_MAP: Record<string, [Role, VoteButton]> = {
-  q: ['left', 'white'], w: ['left', 'red'], e: ['left', 'blue'], r: ['left', 'yellow'],
-  a: ['chief', 'white'], s: ['chief', 'red'], d: ['chief', 'blue'], f: ['chief', 'yellow'],
-  z: ['right', 'white'], x: ['right', 'red'], c: ['right', 'blue'], v: ['right', 'yellow'],
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatTime(totalSeconds: number): string {
-  const m = Math.floor(totalSeconds / 60)
-  const s = Math.floor(totalSeconds % 60)
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-
-function dayLabel(startDate: string, index: number): string {
-  if (!startDate) return `Day ${index + 1}`
-  const date = new Date(startDate)
-  date.setDate(date.getDate() + index)
-  return `Day ${index + 1} — ${date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`
-}
-
-// ---------------------------------------------------------------------------
-// RefereeLight component
-// ---------------------------------------------------------------------------
-
-function RefereeLight({ vote, revealed }: { vote: VoteButton | null; revealed: boolean }) {
-  const voted = vote !== null
-  const CIRCLE = 'w-[20vw] h-[20vw] rounded-full'
-
-  const stripClass =
-    revealed && vote === 'blue' ? 'bg-blue-600' :
-      revealed && vote === 'yellow' ? 'bg-yellow-400' :
-        revealed && vote === 'red' ? 'bg-red-600' :
-          null
-
-  return (
-    <div className="flex flex-col items-center gap-2">
-      {/* Circle: invisible → gray ring → colored */}
-      {!voted ? (
-        <div className={CIRCLE} />
-      ) : !revealed ? (
-        <div className={`${CIRCLE} border-4 border-secondary`} />
-      ) : vote === 'white' ? (
-        <div className={`${CIRCLE} bg-white`} />
-      ) : (
-        <div className={`${CIRCLE} bg-red-600`} />
-      )}
-
-      {/* Secondary color strip for blue / yellow cards; spacer when absent */}
-      {stripClass
-        ? <div className={`w-[20vw] h-[1.5vw] rounded-sm ${stripClass}`} />
-        : <div className="w-[20vw] h-[1.5vw]" />
-      }
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Page component
-// ---------------------------------------------------------------------------
+import { RefereeLight } from '@/components/RefereeLight'
+import { formatTime, dayLabel } from '@/lib/platformHelpers'
+import {
+  ACTIVE_DURATION,
+  INITIAL_CLOCK,
+  INITIAL_VOTES,
+  KEY_MAP,
+  STORAGE_KEY,
+  type ClockSnapshot,
+  type Role,
+  type StoredMeetConfig,
+  type VoteButton,
+} from '@/lib/platformTypes'
 
 export default function PlatformView() {
   const { id } = useParams<{ id: string }>()
@@ -141,7 +44,7 @@ export default function PlatformView() {
   const [clock, setClock] = useState<ClockSnapshot>(INITIAL_CLOCK)
 
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const resetTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Clock countdown — ticks every 100ms while RUNNING
   useEffect(() => {
@@ -225,8 +128,8 @@ export default function PlatformView() {
   // ── Clock display ─────────────────────────────────────────────────────────
   const clockColorClass =
     clock.state === 'EXPIRED' ? 'text-red-500' :
-      clock.remaining <= 30 ? 'text-yellow-400' :
-        'text-primary'
+    clock.remaining <= 30    ? 'text-yellow-400' :
+    'text-primary'
 
   return (
     <div className="platform-display min-h-screen bg-background flex flex-col">
@@ -240,7 +143,7 @@ export default function PlatformView() {
       <div className="flex-1 flex flex-col items-center justify-center gap-[6vh]">
         {/* Referee lights: Left — Chief — Right */}
         <div className="flex items-start gap-[5vw]">
-          <RefereeLight vote={votes.left} revealed={revealed} />
+          <RefereeLight vote={votes.left}  revealed={revealed} />
           <RefereeLight vote={votes.chief} revealed={revealed} />
           <RefereeLight vote={votes.right} revealed={revealed} />
         </div>
