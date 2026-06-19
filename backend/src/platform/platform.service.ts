@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { PlatformManager } from './models/platform-manager';
 import { Platform } from './models/platform';
-import { Button, Role } from './models/enums';
+import { Button, Role, ClockMode } from './models/enums';
 import { CreatePlatformDto } from './dto/create-platform.dto';
 import { RegisterRemoteDto } from './dto/register-remote.dto';
 import { EnsurePlatformDto } from './dto/ensure-platform.dto';
@@ -14,6 +14,7 @@ import { PlatformGateway } from './platform.gateway';
 @Injectable()
 export class PlatformService {
   private readonly manager = new PlatformManager();
+  private readonly breakTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(private readonly gateway: PlatformGateway) {}
 
@@ -124,14 +125,45 @@ export class PlatformService {
     }
   }
 
+  startPlatformBreak(platformId: string, durationSeconds: number) {
+    const platform = this.getPlatform(platformId);
+    try {
+      platform.clock.configureBreak(durationSeconds);
+      platform.clock.start();
+      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+      this.scheduleBreakReset(platformId, durationSeconds);
+      return platform.serialize();
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
+  }
+
   startGlobalBreak(durationSeconds: number) {
     try {
       this.manager.startGlobalBreak(durationSeconds);
       const all = this.manager.serializeAll();
       this.gateway.emitGlobalUpdate(all);
+      for (const platform of this.manager.listPlatforms()) {
+        this.scheduleBreakReset(platform.platformId, durationSeconds);
+      }
       return all;
     } catch (e) {
       throw new BadRequestException((e as Error).message);
     }
+  }
+
+  private scheduleBreakReset(platformId: string, durationSeconds: number) {
+    if (this.breakTimers.has(platformId)) {
+      clearTimeout(this.breakTimers.get(platformId)!);
+    }
+    const timer = setTimeout(() => {
+      const platform = this.manager.getPlatform(platformId);
+      if (platform.clock.mode === ClockMode.BREAK) {
+        platform.clock.resetToActive();
+        this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+      }
+      this.breakTimers.delete(platformId);
+    }, durationSeconds * 1000);
+    this.breakTimers.set(platformId, timer);
   }
 }

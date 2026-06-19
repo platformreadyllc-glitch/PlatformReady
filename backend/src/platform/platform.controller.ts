@@ -69,4 +69,12 @@ export class PlatformController {
   resetAttempt(@Param('id') id: string) {
     return this.platformService.resetAttempt(id);
   }
+
+  @Post(':id/break')
+  startPlatformBreak(
+    @Param('id') id: string,
+    @Body() dto: StartGlobalBreakDto,
+  ) {
+    return this.platformService.startPlatformBreak(id, dto.durationSeconds);
+  }
 }
