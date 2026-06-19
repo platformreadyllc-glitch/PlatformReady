@@ -1,7 +1,9 @@
+import { useMemo } from 'react'
 import { Monitor, Moon, Sun } from 'lucide-react'
-import { BrowserRouter, NavLink, Outlet, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, NavLink, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { useTheme, THEMES, type Theme } from '@/hooks/useTheme'
 import MeetSetup from '@/pages/MeetSetup'
+import PlatformView from '@/pages/PlatformView'
 
 const THEME_META: Record<Theme, { icon: React.ReactNode; label: string }> = {
   midnight: { icon: <Moon size={16} />, label: 'Midnight' },
@@ -18,8 +20,25 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     isActive ? 'bg-nav-active text-primary' : 'text-secondary hover:bg-nav-hover hover:text-primary'
   }`
 
+function readActivePlatforms(): Array<{ name: string }> {
+  try {
+    const raw = localStorage.getItem('platformready_meet')
+    if (!raw) return []
+    const config = JSON.parse(raw)
+    const platforms: Array<{ name: string; active: boolean }> = config.days?.[0]?.platforms ?? []
+    return platforms.filter((p) => p.active)
+  } catch {
+    return []
+  }
+}
+
 function Layout() {
   const { theme, cycleTheme } = useTheme()
+  const location = useLocation()
+
+  // Re-read platforms whenever navigation occurs so the nav stays in sync
+  // after the user saves a new config on MeetSetup.
+  const activePlatforms = useMemo(readActivePlatforms, [location])
 
   return (
     <div className="flex h-screen bg-background">
@@ -28,9 +47,19 @@ function Layout() {
         <NavLink to="/" end className={navLinkClass}>
           Meet Setup
         </NavLink>
-        <NavLink to="/platform/1" className={navLinkClass}>
-          Platform View
-        </NavLink>
+
+        {activePlatforms.length > 0 ? (
+          activePlatforms.map((p, i) => (
+            <NavLink key={i} to={`/platform/${i + 1}`} className={navLinkClass}>
+              {p.name || `Platform ${i + 1}`}
+            </NavLink>
+          ))
+        ) : (
+          <NavLink to="/platform/1" className={navLinkClass}>
+            Platform View
+          </NavLink>
+        )}
+
         <NavLink to="/controls" className={navLinkClass}>
           Controls
         </NavLink>
@@ -64,9 +93,10 @@ export default function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<MeetSetup />} />
-          <Route path="/platform/:id" element={<Placeholder name="Platform View" />} />
           <Route path="/controls" element={<Placeholder name="Controls" />} />
         </Route>
+        {/* Platform view renders without the sidebar — full-screen display for TVs */}
+        <Route path="/platform/:id" element={<PlatformView />} />
       </Routes>
     </BrowserRouter>
   )
