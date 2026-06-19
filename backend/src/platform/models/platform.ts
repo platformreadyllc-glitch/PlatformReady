@@ -1,4 +1,4 @@
-import { Role, Button, ACTIVE_ROLES, VALID_ROLES, ClockMode } from './enums';
+import { Role, Button, ACTIVE_ROLES, VALID_ROLES, ClockMode, ClockState } from './enums';
 import { Remote } from './remote';
 import { PlatformClock } from './platform-clock';
 import { determineDecisionOutcome, DecisionOutcome } from './decisions';
@@ -147,6 +147,9 @@ export class Platform {
     if (this.clock.mode === ClockMode.BREAK) {
       throw new Error('Cannot cast votes during break');
     }
+    if (this.clock.state() === ClockState.IDLE) {
+      throw new Error('Cannot cast votes before the clock has started');
+    }
     remote.pressButton(buttonName);
 
     if (this.hasCompleteVoteSet()) {
@@ -235,6 +238,9 @@ export class Platform {
     }
     if (!remote.hasClockButton) {
       throw new Error(`Remote ${remoteId} does not have a clock button`);
+    }
+    if (this.clock.mode === ClockMode.BREAK) {
+      throw new Error('Cannot control clock during break');
     }
     remote.pressButton('clock');
     this.clock.handleChiefClockPress(atTime);
