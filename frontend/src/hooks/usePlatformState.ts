@@ -26,7 +26,9 @@ export interface PlatformState {
   revealed: boolean
   clock: ClockSnapshot
   connected: boolean
+  attemptChangeActive: boolean
   startBreakCountdown: (minutes: 10 | 20) => void
+  toggleAttemptChange: () => void
 }
 
 const BACKEND_URL_ID = (id: string) => `platform-${id}`
@@ -165,8 +167,14 @@ export function usePlatformState(id: string | undefined, inputEnabled = true): P
       }
     : INITIAL_CLOCK
 
+  const attemptChangeActive = backendState?.attemptChangeActive ?? false
+
   function startBreakCountdown(minutes: 10 | 20) {
     platformAction(`/platforms/${platformId}/break`, { durationSeconds: minutes * 60 })
+  }
+
+  function toggleAttemptChange() {
+    platformAction(`/platforms/${platformId}/attempt-change`)
   }
 
   return {
@@ -175,6 +183,8 @@ export function usePlatformState(id: string | undefined, inputEnabled = true): P
     revealed,
     clock,
     connected,
+    attemptChangeActive,
     startBreakCountdown,
+    toggleAttemptChange,
   }
 }

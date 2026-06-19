@@ -8,13 +8,28 @@ interface Props {
   votes: Record<Role, VoteButton | null>
   revealed: boolean
   clock: ClockSnapshot
+  attemptChangeActive: boolean
 }
 
-export function PlatformDisplay({ platformName, dayStr, votes, revealed, clock }: Props) {
+export function PlatformDisplay({ platformName, dayStr, votes, revealed, clock, attemptChangeActive }: Props) {
   const clockColorClass =
     clock.state === 'EXPIRED' ? 'text-red-500' :
       clock.remaining <= 30 ? 'text-yellow-400' :
         'text-primary'
+
+  if (attemptChangeActive) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center attempt-change-pulse">
+        <div className="flex flex-col items-center gap-[4vh]">
+          <span className="text-[8vw] text-white/70 select-none">▼ ▼ ▼</span>
+          <span className="text-[12vw] [font-family:'Orbitron',sans-serif] font-black text-white tracking-widest text-center leading-tight">
+            ATTEMPT<br />CHANGE
+          </span>
+          <span className="text-[8vw] text-white/70 select-none">▲ ▲ ▲</span>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <>
@@ -58,7 +73,6 @@ export function PlatformDisplay({ platformName, dayStr, votes, revealed, clock }
               <span className="text-[15vw] [font-family:'DSEG7ClassicBold',monospace] font-bold tabular-nums text-red-500">
                 {formatTime(clock.openingAttemptsRemaining)}
               </span>
-
             </div>
           ) : (
             <div className="flex flex-col items-center [font-family:'Orbitron',sans-serif] font-bold text-red-500">

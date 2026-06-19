@@ -18,6 +18,7 @@ export interface BackendPlatformState {
   clock: BackendClock
   votes: Record<string, string | null>
   hasCompleteVoteSet: boolean
+  attemptChangeActive: boolean
 }
 
 interface UsePlatformSocketResult {

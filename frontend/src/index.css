@@ -120,3 +120,11 @@ body {
   background-color: var(--background);
   color: var(--text-primary);
 }
+
+@keyframes attempt-change-pulse {
+  0%, 100% { background-color: rgb(245 158 11); } /* amber-500 */
+  50%       { background-color: rgb(180 83 9);   } /* amber-700 — deeper contrast */
+}
+.attempt-change-pulse {
+  animation: attempt-change-pulse 1.2s ease-in-out infinite;
+}
