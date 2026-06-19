@@ -71,13 +71,15 @@ export function usePlatformState(id: string | undefined, inputEnabled = true): P
   const resetTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wasComplete = useRef(false)
   const clockModeRef = useRef<string>('ACTIVE')
+  const clockStateRef = useRef<string>('IDLE')
 
   // Resync clock and handle vote-reveal transitions when backend state changes
   useEffect(() => {
     if (!backendState) return
 
-    // Keep ref in sync so the keyboard handler can read it without stale closure
+    // Keep refs in sync so the keyboard handler can read them without stale closure
     clockModeRef.current = backendState.clock.mode
+    clockStateRef.current = backendState.clock.state
 
     // Resync the local countdown from the authoritative backend value
     setLocalRemaining(backendState.clock.remaining)
@@ -117,19 +119,21 @@ export function usePlatformState(id: string | undefined, inputEnabled = true): P
       if (!inputEnabled) return
 
       if (e.key === 'Enter') {
+        if (clockModeRef.current === 'BREAK') return
         platformAction(`/platforms/${platformId}/clock`, { remoteId: 'kb-chief' })
         return
       }
 
       if (e.key === ' ') {
         e.preventDefault()
+        if (clockModeRef.current === 'BREAK') return
         platformAction(`/platforms/${platformId}/reset`)
         return
       }
 
       const mapping = KEY_MAP[e.key.toLowerCase()]
       if (!mapping) return
-      if (clockModeRef.current === 'BREAK') return
+      if (clockModeRef.current === 'BREAK' || clockStateRef.current === 'IDLE') return
       const [role, button] = mapping
       platformAction(`/platforms/${platformId}/vote`, { remoteId: `kb-${role}`, button })
     }
