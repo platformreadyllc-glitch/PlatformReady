@@ -13,8 +13,8 @@ interface Props {
 export function PlatformDisplay({ platformName, dayStr, votes, revealed, clock }: Props) {
   const clockColorClass =
     clock.state === 'EXPIRED' ? 'text-red-500' :
-    clock.remaining <= 30    ? 'text-yellow-400' :
-    'text-primary'
+      clock.remaining <= 30 ? 'text-yellow-400' :
+        'text-primary'
 
   return (
     <>
@@ -28,7 +28,7 @@ export function PlatformDisplay({ platformName, dayStr, votes, revealed, clock }
       <div className="flex-1 flex flex-col items-center justify-center gap-[6vh]">
         {/* Referee lights: Left — Chief — Right */}
         <div className="flex items-start gap-[5vw]">
-          <RefereeLight vote={votes.left}  revealed={revealed} />
+          <RefereeLight vote={votes.left} revealed={revealed} />
           <RefereeLight vote={votes.chief} revealed={revealed} />
           <RefereeLight vote={votes.right} revealed={revealed} />
         </div>
@@ -41,7 +41,7 @@ export function PlatformDisplay({ platformName, dayStr, votes, revealed, clock }
 
           {clock.mode === 'BREAK' && clock.openingAttemptsOpen && clock.openingAttemptsRemaining !== null && (
             <div className="flex flex-col items-center gap-1 mt-6">
-              <span className="text-4xl [font-family:'Inter',sans-serif] font-bold tabular-nums text-red-500">
+              <span className="text-[15vw] [font-family:'DSEG7ClassicBold',monospace] font-bold tabular-nums text-red-500">
                 {formatTime(clock.openingAttemptsRemaining)}
               </span>
               <span className="text-sm text-secondary uppercase tracking-widest">
