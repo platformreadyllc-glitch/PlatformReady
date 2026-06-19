@@ -155,7 +155,8 @@ export class Platform {
     const votes: Record<string, Button | null> = {};
     for (const remote of this.activeRemotes.values()) {
       if (ACTIVE_ROLES.has(remote.role)) {
-        votes[remote.role] = remote.lastButtonPressed;
+        const btn = remote.lastButtonPressed;
+        votes[remote.role] = btn === 'clock' ? null : btn;
       }
     }
     return votes;
