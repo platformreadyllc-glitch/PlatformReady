@@ -64,8 +64,15 @@ export default function AttemptChangeOverlay({
   const [botDir, setBotDir] = useState<1 | -1>(-1);
 
   const [flashOn, setFlashOn] = useState(false);
-  const [ambient, setAmbient] = useState(0.35);
+  const [ambient, setAmbient] = useState(0);
   const [glitchOffset, setGlitchOffset] = useState<{ r: number; b: number; main: number } | null>(null);
+
+  // Refs shadow direction/position so the step loop always reads current values
+  // without a stale closure (direction state alone would be captured at effect-run time)
+  const topDirRef = useRef<1 | -1>(1);
+  const topPosRef = useRef(0);
+  const botDirRef = useRef<1 | -1>(-1);
+  const botPosRef = useRef(segments - 1);
 
   const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flickerLoopRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -85,20 +92,24 @@ export default function AttemptChangeOverlay({
     if (!active) return;
 
     const step = () => {
-      setTopPos((prevPos) => {
-        const next = prevPos + topDir;
-        if (next >= segments - 1 || next <= 0) {
-          setTopDir((d) => (d === 1 ? -1 : 1));
-        }
-        return Math.max(0, Math.min(segments - 1, next));
-      });
-      setBotPos((prevPos) => {
-        const next = prevPos + botDir;
-        if (next >= segments - 1 || next <= 0) {
-          setBotDir((d) => (d === 1 ? -1 : 1));
-        }
-        return Math.max(0, Math.min(segments - 1, next));
-      });
+      // Top bar — read/write via refs so direction is always current
+      const nextTop = topPosRef.current + topDirRef.current;
+      if (nextTop >= segments - 1 || nextTop <= 0) {
+        topDirRef.current = topDirRef.current === 1 ? -1 : 1;
+        setTopDir(topDirRef.current);
+      }
+      topPosRef.current = Math.max(0, Math.min(segments - 1, nextTop));
+      setTopPos(topPosRef.current);
+
+      // Bottom bar
+      const nextBot = botPosRef.current + botDirRef.current;
+      if (nextBot >= segments - 1 || nextBot <= 0) {
+        botDirRef.current = botDirRef.current === 1 ? -1 : 1;
+        setBotDir(botDirRef.current);
+      }
+      botPosRef.current = Math.max(0, Math.min(segments - 1, nextBot));
+      setBotPos(botPosRef.current);
+
       stepTimerRef.current = setTimeout(step, stepMs);
     };
 
@@ -106,7 +117,6 @@ export default function AttemptChangeOverlay({
     return () => {
       if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, segments, stepMs]);
 
   const runGlitchBurst = useCallback(() => {
@@ -114,7 +124,7 @@ export default function AttemptChangeOverlay({
     requestAnimationFrame(() => setFlashOn(false));
 
     setAmbient(0.6);
-    const t0 = setTimeout(() => setAmbient(0.35), 70);
+    const t0 = setTimeout(() => setAmbient(0), 70);
     glitchTimersRef.current.push(t0);
 
     let glitches = 0;
@@ -138,7 +148,7 @@ export default function AttemptChangeOverlay({
       clearAllTimers();
       setGlitchOffset(null);
       setFlashOn(false);
-      setAmbient(0.35);
+      setAmbient(0);
       return;
     }
 
@@ -152,6 +162,10 @@ export default function AttemptChangeOverlay({
 
   useEffect(() => {
     if (active) {
+      topPosRef.current = 0;
+      topDirRef.current = 1;
+      botPosRef.current = segments - 1;
+      botDirRef.current = -1;
       setTopPos(0);
       setTopDir(1);
       setBotPos(segments - 1);
