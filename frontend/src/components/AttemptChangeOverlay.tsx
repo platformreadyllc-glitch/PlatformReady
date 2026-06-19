@@ -78,46 +78,12 @@ export default function AttemptChangeOverlay({
   const flickerLoopRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const glitchTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  // Flash interval synced to traversal time so the burst fires as lights reach each end
-  const syncedFlickerMs = (segments - 1) * stepMs;
-
   const clearAllTimers = useCallback(() => {
     if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
     if (flickerLoopRef.current) clearInterval(flickerLoopRef.current);
     glitchTimersRef.current.forEach(clearTimeout);
     glitchTimersRef.current = [];
   }, []);
-
-  useEffect(() => {
-    if (!active) return;
-
-    const step = () => {
-      // Top bar — read/write via refs so direction is always current
-      const nextTop = topPosRef.current + topDirRef.current;
-      if (nextTop >= segments - 1 || nextTop <= 0) {
-        topDirRef.current = topDirRef.current === 1 ? -1 : 1;
-        setTopDir(topDirRef.current);
-      }
-      topPosRef.current = Math.max(0, Math.min(segments - 1, nextTop));
-      setTopPos(topPosRef.current);
-
-      // Bottom bar
-      const nextBot = botPosRef.current + botDirRef.current;
-      if (nextBot >= segments - 1 || nextBot <= 0) {
-        botDirRef.current = botDirRef.current === 1 ? -1 : 1;
-        setBotDir(botDirRef.current);
-      }
-      botPosRef.current = Math.max(0, Math.min(segments - 1, nextBot));
-      setBotPos(botPosRef.current);
-
-      stepTimerRef.current = setTimeout(step, stepMs);
-    };
-
-    stepTimerRef.current = setTimeout(step, stepMs);
-    return () => {
-      if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
-    };
-  }, [active, segments, stepMs]);
 
   const runGlitchBurst = useCallback(() => {
     setFlashOn(true);
@@ -144,6 +110,38 @@ export default function AttemptChangeOverlay({
   }, []);
 
   useEffect(() => {
+    if (!active) return;
+
+    const step = () => {
+      // Top bar — fire flash exactly when it hits a wall (same JS tick as position update)
+      const nextTop = topPosRef.current + topDirRef.current;
+      if (nextTop >= segments - 1 || nextTop <= 0) {
+        topDirRef.current = topDirRef.current === 1 ? -1 : 1;
+        setTopDir(topDirRef.current);
+        runGlitchBurst();
+      }
+      topPosRef.current = Math.max(0, Math.min(segments - 1, nextTop));
+      setTopPos(topPosRef.current);
+
+      // Bottom bar (no extra flash — bars are in opposite phase so they hit ends together)
+      const nextBot = botPosRef.current + botDirRef.current;
+      if (nextBot >= segments - 1 || nextBot <= 0) {
+        botDirRef.current = botDirRef.current === 1 ? -1 : 1;
+        setBotDir(botDirRef.current);
+      }
+      botPosRef.current = Math.max(0, Math.min(segments - 1, nextBot));
+      setBotPos(botPosRef.current);
+
+      stepTimerRef.current = setTimeout(step, stepMs);
+    };
+
+    stepTimerRef.current = setTimeout(step, stepMs);
+    return () => {
+      if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
+    };
+  }, [active, segments, stepMs, runGlitchBurst]);
+
+  useEffect(() => {
     if (!active) {
       clearAllTimers();
       setGlitchOffset(null);
@@ -152,13 +150,12 @@ export default function AttemptChangeOverlay({
       return;
     }
 
-    runGlitchBurst();
-    flickerLoopRef.current = setInterval(runGlitchBurst, syncedFlickerMs);
+    runGlitchBurst(); // initial burst when overlay appears; subsequent bursts driven by step boundary detection
 
     return () => {
       clearAllTimers();
     };
-  }, [active, syncedFlickerMs, runGlitchBurst, clearAllTimers]);
+  }, [active, runGlitchBurst, clearAllTimers]);
 
   useEffect(() => {
     if (active) {
