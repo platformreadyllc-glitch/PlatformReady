@@ -670,6 +670,40 @@ describe('Platform', () => {
     expect(platform.serialize().attemptChangeActive).toBe(true);
   });
 
+  it('castVote throws when attempt change is active', () => {
+    const platform = new Platform({ platformId: 'ac-3' });
+    platform.registerRemote('left-1', 'left', { active: true });
+    platform.registerRemote('chief-1', 'chief', { active: true });
+    platform.handleClockButton('chief-1', 0.0);
+    platform.toggleAttemptChange();
+    expect(() => platform.castVote('left-1', 'white')).toThrow('attempt change');
+  });
+
+  it('handleClockButton throws when attempt change is active', () => {
+    const platform = new Platform({ platformId: 'ac-4' });
+    platform.registerRemote('chief-1', 'chief', { active: true });
+    platform.toggleAttemptChange();
+    expect(() => platform.handleClockButton('chief-1')).toThrow('attempt change');
+  });
+
+  it('votes are allowed again after attempt change is deactivated', () => {
+    const platform = new Platform({ platformId: 'ac-5' });
+    platform.registerRemote('left-1', 'left', { active: true });
+    platform.registerRemote('chief-1', 'chief', { active: true });
+    platform.handleClockButton('chief-1', 0.0);
+    platform.toggleAttemptChange();
+    platform.toggleAttemptChange();
+    expect(() => platform.castVote('left-1', 'white')).not.toThrow();
+  });
+
+  it('clock is controllable again after attempt change is deactivated', () => {
+    const platform = new Platform({ platformId: 'ac-6' });
+    platform.registerRemote('chief-1', 'chief', { active: true });
+    platform.toggleAttemptChange();
+    platform.toggleAttemptChange();
+    expect(() => platform.handleClockButton('chief-1')).not.toThrow();
+  });
+
   it('serialize includes clock with correct shape', () => {
     const platform = new Platform({ platformId: 'clk6' });
     const data = platform.serialize();

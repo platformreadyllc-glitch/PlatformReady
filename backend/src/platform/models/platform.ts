@@ -149,6 +149,9 @@ export class Platform {
     if (this.clock.mode === ClockMode.BREAK) {
       throw new Error('Cannot cast votes during break');
     }
+    if (this.attemptChangeActive) {
+      throw new Error('Cannot cast votes during attempt change');
+    }
     if (this.clock.state() === ClockState.IDLE) {
       throw new Error('Cannot cast votes before the clock has started');
     }
@@ -243,6 +246,9 @@ export class Platform {
     }
     if (this.clock.mode === ClockMode.BREAK) {
       throw new Error('Cannot control clock during break');
+    }
+    if (this.attemptChangeActive) {
+      throw new Error('Cannot control clock during attempt change');
     }
     remote.pressButton('clock');
     this.clock.handleChiefClockPress(atTime);
