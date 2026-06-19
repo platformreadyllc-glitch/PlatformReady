@@ -109,7 +109,9 @@ export class PlatformService {
   resetAttempt(platformId: string) {
     const platform = this.getPlatform(platformId);
     platform.resetVotes();
-    platform.clock.resetToActive();
+    if (platform.clock.mode !== ClockMode.BREAK) {
+      platform.clock.resetToActive();
+    }
     this.gateway.emitPlatformUpdate(platformId, platform.serialize());
     return platform.serialize();
   }
