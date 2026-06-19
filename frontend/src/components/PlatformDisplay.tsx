@@ -42,7 +42,7 @@ export function PlatformDisplay({ platformName, dayStr, votes, revealed, clock }
           {/* Break remaining */}
           <div className="flex flex-col items-center gap-2">
             <span className={`text-[5vw] [font-family:'Orbitron',sans-serif] font-bold tabular-nums ${clockColorClass}`}>
-              FLIGHT A STARTS IN:
+              FLIGHT A BEGINS:
             </span>
             <span className={`text-[15vw] [font-family:'DSEG7ClassicBold',monospace] font-bold tabular-nums ${clockColorClass}`}>
               {formatTime(clock.remaining)}
@@ -61,9 +61,10 @@ export function PlatformDisplay({ platformName, dayStr, votes, revealed, clock }
 
             </div>
           ) : (
-            <span className="text-[5vw] [font-family:'Orbitron',sans-serif] font-bold tabular-nums text-red-500">
-              OPENERS LOCKED
-            </span>
+            <div className="flex flex-col items-center [font-family:'Orbitron',sans-serif] font-bold text-red-500">
+              <span className="text-[7vw]">FLIGHT A</span>
+              <span className="text-[7vw]">OPENERS LOCKED</span>
+            </div>
           )}
         </div>
       )}
