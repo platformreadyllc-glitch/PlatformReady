@@ -1,0 +1,297 @@
+import React, { useEffect, useRef, useState, useCallback } from "react";
+
+export interface AttemptChangeOverlayProps {
+  active: boolean;
+  title?: string;
+  subtitle?: string;
+  segments?: number;
+  stepMs?: number;
+  onReady?: () => void;
+}
+
+interface TailStop {
+  alpha: number;
+  glow: string | null;
+}
+
+const TAIL: TailStop[] = [
+  { alpha: 1.0, glow: "0 0 10px 2px" },
+  { alpha: 0.5, glow: "0 0 6px 1px" },
+  { alpha: 0.2, glow: null },
+];
+
+const LIT_COLOR = "245, 158, 11"; // amber-500, matches scoring table buttons
+
+function ChaseRow({
+  segments,
+  headIndex,
+  direction,
+  reverseLabel,
+}: {
+  segments: number;
+  headIndex: number;
+  direction: 1 | -1;
+  reverseLabel: string;
+}) {
+  return (
+    <div className="ac-row" role="presentation" aria-hidden="true" data-row={reverseLabel}>
+      {Array.from({ length: segments }, (_, i) => {
+        const offset = (headIndex - i) * direction;
+        const tail = offset >= 0 && offset < TAIL.length ? TAIL[offset] : null;
+        const style: React.CSSProperties = tail
+          ? {
+              background: `rgba(${LIT_COLOR}, ${tail.alpha})`,
+              boxShadow: tail.glow ? `${tail.glow} rgba(${LIT_COLOR}, ${tail.alpha * 0.9})` : "none",
+            }
+          : { background: "transparent", boxShadow: "none" };
+        return <div className="ac-cell" key={i} style={style} />;
+      })}
+    </div>
+  );
+}
+
+export default function AttemptChangeOverlay({
+  active,
+  title = "ATTEMPT CHANGE",
+  subtitle,
+  segments = 14,
+  stepMs = 70,
+  onReady,
+}: AttemptChangeOverlayProps) {
+  const [topPos, setTopPos] = useState(0);
+  const [topDir, setTopDir] = useState<1 | -1>(1);
+  const [botPos, setBotPos] = useState(segments - 1);
+  const [botDir, setBotDir] = useState<1 | -1>(-1);
+
+  const [flashOn, setFlashOn] = useState(false);
+  const [ambient, setAmbient] = useState(0.35);
+  const [glitchOffset, setGlitchOffset] = useState<{ r: number; b: number; main: number } | null>(null);
+
+  const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flickerLoopRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const glitchTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  // Flash interval synced to traversal time so the burst fires as lights reach each end
+  const syncedFlickerMs = (segments - 1) * stepMs;
+
+  const clearAllTimers = useCallback(() => {
+    if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
+    if (flickerLoopRef.current) clearInterval(flickerLoopRef.current);
+    glitchTimersRef.current.forEach(clearTimeout);
+    glitchTimersRef.current = [];
+  }, []);
+
+  useEffect(() => {
+    if (!active) return;
+
+    const step = () => {
+      setTopPos((prevPos) => {
+        const next = prevPos + topDir;
+        if (next >= segments - 1 || next <= 0) {
+          setTopDir((d) => (d === 1 ? -1 : 1));
+        }
+        return Math.max(0, Math.min(segments - 1, next));
+      });
+      setBotPos((prevPos) => {
+        const next = prevPos + botDir;
+        if (next >= segments - 1 || next <= 0) {
+          setBotDir((d) => (d === 1 ? -1 : 1));
+        }
+        return Math.max(0, Math.min(segments - 1, next));
+      });
+      stepTimerRef.current = setTimeout(step, stepMs);
+    };
+
+    stepTimerRef.current = setTimeout(step, stepMs);
+    return () => {
+      if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, segments, stepMs]);
+
+  const runGlitchBurst = useCallback(() => {
+    setFlashOn(true);
+    requestAnimationFrame(() => setFlashOn(false));
+
+    setAmbient(0.6);
+    const t0 = setTimeout(() => setAmbient(0.35), 70);
+    glitchTimersRef.current.push(t0);
+
+    let glitches = 0;
+    const maxGlitches = 5;
+    const fire = () => {
+      glitches += 1;
+      const dx = Math.random() * 12 - 6;
+      setGlitchOffset({ r: dx, b: -dx, main: Math.random() * 4 - 2 });
+      const clear = setTimeout(() => setGlitchOffset(null), 60);
+      glitchTimersRef.current.push(clear);
+      if (glitches < maxGlitches) {
+        const next = setTimeout(fire, 160);
+        glitchTimersRef.current.push(next);
+      }
+    };
+    fire();
+  }, []);
+
+  useEffect(() => {
+    if (!active) {
+      clearAllTimers();
+      setGlitchOffset(null);
+      setFlashOn(false);
+      setAmbient(0.35);
+      return;
+    }
+
+    runGlitchBurst();
+    flickerLoopRef.current = setInterval(runGlitchBurst, syncedFlickerMs);
+
+    return () => {
+      clearAllTimers();
+    };
+  }, [active, syncedFlickerMs, runGlitchBurst, clearAllTimers]);
+
+  useEffect(() => {
+    if (active) {
+      setTopPos(0);
+      setTopDir(1);
+      setBotPos(segments - 1);
+      setBotDir(-1);
+      onReady?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, segments]);
+
+  if (!active) return null;
+
+  return (
+    <div className="ac-overlay" role="status" aria-live="polite">
+      <style>{STYLES}</style>
+
+      <div className="ac-amber-wash" style={{ opacity: ambient }} />
+
+      <ChaseRow segments={segments} headIndex={topPos} direction={topDir} reverseLabel="top" />
+
+      <div className="ac-textwrap">
+        <div className="ac-stack">
+          <div
+            className="ac-main"
+            style={glitchOffset ? { transform: `translateX(${glitchOffset.main}px)` } : undefined}
+          >
+            {title}
+          </div>
+          {glitchOffset && (
+            <>
+              <div
+                className="ac-ghost ac-ghost-r"
+                style={{ opacity: 0.6, transform: `translateX(${glitchOffset.r}px)` }}
+              >
+                {title}
+              </div>
+              <div
+                className="ac-ghost ac-ghost-b"
+                style={{ opacity: 0.6, transform: `translateX(${glitchOffset.b}px)` }}
+              >
+                {title}
+              </div>
+            </>
+          )}
+          {subtitle && <div className="ac-subtitle">{subtitle}</div>}
+        </div>
+      </div>
+
+      <ChaseRow segments={segments} headIndex={botPos} direction={botDir} reverseLabel="bottom" />
+
+      <div className="ac-flash" style={{ opacity: flashOn ? 0.85 : 0 }} />
+    </div>
+  );
+}
+
+const STYLES = `
+.ac-overlay {
+  position: absolute;
+  inset: 0;
+  background: var(--background);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+.ac-amber-wash {
+  position: absolute;
+  inset: 0;
+  background: #412402;
+  transition: opacity 0.08s linear;
+}
+.ac-flash {
+  position: absolute;
+  inset: 0;
+  background: #ffffff;
+  pointer-events: none;
+  transition: opacity 0.12s ease-out;
+}
+.ac-row {
+  position: relative;
+  display: flex;
+  gap: 6px;
+  height: 26px;
+  margin: 0 40px;
+  z-index: 2;
+}
+.ac-row[data-row="top"] { margin-bottom: 24px; }
+.ac-row[data-row="bottom"] { margin-top: 24px; }
+.ac-cell {
+  flex: 1;
+  border-radius: 3px;
+  transition: background 0.04s linear, box-shadow 0.04s linear;
+}
+.ac-textwrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+.ac-stack {
+  position: relative;
+  text-align: center;
+}
+.ac-main {
+  font-family: 'Orbitron', sans-serif;
+  text-transform: uppercase;
+  font-size: 48px;
+  font-weight: 500;
+  letter-spacing: 4px;
+  color: #f0f0f0;
+  position: relative;
+}
+.ac-ghost {
+  font-family: 'Orbitron', sans-serif;
+  text-transform: uppercase;
+  font-size: 48px;
+  font-weight: 500;
+  letter-spacing: 4px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+.ac-ghost-r { color: #E24B4A; }
+.ac-ghost-b { color: #378ADD; }
+.ac-subtitle {
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 3px;
+  color: #FAC775;
+  margin-top: 10px;
+  opacity: 0.85;
+}
+
+@media (max-width: 640px) {
+  .ac-main, .ac-ghost { font-size: 28px; letter-spacing: 2px; }
+  .ac-row { margin: 0 16px; height: 18px; }
+  .ac-subtitle { font-size: 12px; letter-spacing: 2px; }
+}
+`;

@@ -1,6 +1,7 @@
 import { RefereeLight } from '@/components/RefereeLight'
 import { formatTime } from '@/lib/platformHelpers'
 import type { ClockSnapshot, Role, VoteButton } from '@/lib/platformTypes'
+import AttemptChangeOverlay from '@/components/AttemptChangeOverlay'
 
 interface Props {
   platformName: string
@@ -19,14 +20,8 @@ export function PlatformDisplay({ platformName, dayStr, votes, revealed, clock, 
 
   if (attemptChangeActive) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center attempt-change-pulse">
-        <div className="flex flex-col items-center gap-[4vh]">
-          <span className="text-[8vw] text-white/70 select-none">▼ ▼ ▼</span>
-          <span className="text-[12vw] [font-family:'Orbitron',sans-serif] font-black text-white tracking-widest text-center leading-tight">
-            ATTEMPT<br />CHANGE
-          </span>
-          <span className="text-[8vw] text-white/70 select-none">▲ ▲ ▲</span>
-        </div>
+      <div className="flex-1 relative">
+        <AttemptChangeOverlay active={true} />
       </div>
     )
   }
