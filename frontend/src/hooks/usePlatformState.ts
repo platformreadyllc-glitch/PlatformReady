@@ -70,10 +70,14 @@ export function usePlatformState(id: string | undefined, inputEnabled = true): P
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const resetTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wasComplete = useRef(false)
+  const clockModeRef = useRef<string>('ACTIVE')
 
   // Resync clock and handle vote-reveal transitions when backend state changes
   useEffect(() => {
     if (!backendState) return
+
+    // Keep ref in sync so the keyboard handler can read it without stale closure
+    clockModeRef.current = backendState.clock.mode
 
     // Resync the local countdown from the authoritative backend value
     setLocalRemaining(backendState.clock.remaining)
@@ -125,6 +129,7 @@ export function usePlatformState(id: string | undefined, inputEnabled = true): P
 
       const mapping = KEY_MAP[e.key.toLowerCase()]
       if (!mapping) return
+      if (clockModeRef.current === 'BREAK') return
       const [role, button] = mapping
       platformAction(`/platforms/${platformId}/vote`, { remoteId: `kb-${role}`, button })
     }
@@ -157,7 +162,7 @@ export function usePlatformState(id: string | undefined, inputEnabled = true): P
     : INITIAL_CLOCK
 
   function startBreakCountdown(minutes: 10 | 20) {
-    platformAction('/platforms/break', { durationSeconds: minutes * 60 })
+    platformAction(`/platforms/${platformId}/break`, { durationSeconds: minutes * 60 })
   }
 
   return {
