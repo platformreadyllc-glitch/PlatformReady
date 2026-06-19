@@ -693,4 +693,36 @@ describe('PlatformManager', () => {
     const diff = Math.abs(p1.clock.remaining() - p2.clock.remaining());
     expect(diff).toBeLessThan(0.01);
   });
+
+  it('global break blocks votes on all platforms', () => {
+    const manager = new PlatformManager();
+    const p1 = new Platform({ platformId: 'gb1' });
+    const p2 = new Platform({ platformId: 'gb2' });
+    p1.registerRemote('left-1', 'left', { active: true });
+    p2.registerRemote('left-2', 'left', { active: true });
+    manager.addPlatform(p1);
+    manager.addPlatform(p2);
+
+    manager.startGlobalBreak(600.0);
+
+    expect(() => p1.castVote('left-1', 'white')).toThrow('break');
+    expect(() => p2.castVote('left-2', 'white')).toThrow('break');
+  });
+
+  it('break on one platform does not block votes on another', () => {
+    const manager = new PlatformManager();
+    const p1 = new Platform({ platformId: 'iso1' });
+    const p2 = new Platform({ platformId: 'iso2' });
+    p1.registerRemote('left-1', 'left', { active: true });
+    p2.registerRemote('left-2', 'left', { active: true });
+    manager.addPlatform(p1);
+    manager.addPlatform(p2);
+
+    // Only p1 goes into break
+    p1.clock.configureBreak(600.0);
+    p1.clock.start();
+
+    expect(() => p1.castVote('left-1', 'white')).toThrow('break');
+    expect(() => p2.castVote('left-2', 'white')).not.toThrow();
+  });
 });
