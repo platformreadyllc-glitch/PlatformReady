@@ -654,6 +654,22 @@ describe('Platform', () => {
     expect(() => platform.handleClockButton('chief-1')).toThrow('break');
   });
 
+  it('toggleAttemptChange flips active state', () => {
+    const platform = new Platform({ platformId: 'ac-1' });
+    expect(platform.attemptChangeActive).toBe(false);
+    platform.toggleAttemptChange();
+    expect(platform.attemptChangeActive).toBe(true);
+    platform.toggleAttemptChange();
+    expect(platform.attemptChangeActive).toBe(false);
+  });
+
+  it('attemptChangeActive is included in serialize', () => {
+    const platform = new Platform({ platformId: 'ac-2' });
+    expect(platform.serialize().attemptChangeActive).toBe(false);
+    platform.toggleAttemptChange();
+    expect(platform.serialize().attemptChangeActive).toBe(true);
+  });
+
   it('serialize includes clock with correct shape', () => {
     const platform = new Platform({ platformId: 'clk6' });
     const data = platform.serialize();

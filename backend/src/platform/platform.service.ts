@@ -116,6 +116,13 @@ export class PlatformService {
     return platform.serialize();
   }
 
+  toggleAttemptChange(platformId: string) {
+    const platform = this.getPlatform(platformId);
+    platform.toggleAttemptChange();
+    this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+    return platform.serialize();
+  }
+
   substituteSpare(platformId: string, targetRole: Role) {
     const platform = this.getPlatform(platformId);
     try {

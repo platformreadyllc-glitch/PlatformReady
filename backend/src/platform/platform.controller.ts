@@ -70,6 +70,11 @@ export class PlatformController {
     return this.platformService.resetAttempt(id);
   }
 
+  @Post(':id/attempt-change')
+  toggleAttemptChange(@Param('id') id: string) {
+    return this.platformService.toggleAttemptChange(id);
+  }
+
   @Post(':id/break')
   startPlatformBreak(
     @Param('id') id: string,

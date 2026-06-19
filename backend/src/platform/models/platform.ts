@@ -21,6 +21,7 @@ export interface PlatformSerialized {
   clock: ReturnType<PlatformClock['serialize']>;
   votes: Record<string, Button | null>;
   hasCompleteVoteSet: boolean;
+  attemptChangeActive: boolean;
 }
 
 export class Platform {
@@ -31,6 +32,7 @@ export class Platform {
   inactiveRemotes: Map<string, Remote> = new Map();
   decisionDelay: number;
   clock: PlatformClock = new PlatformClock();
+  attemptChangeActive = false;
   private _decisionReadyAt: number | null = null;
 
   constructor(params: {
@@ -284,6 +286,10 @@ export class Platform {
     return new Map([...this.activeRemotes, ...this.inactiveRemotes]);
   }
 
+  toggleAttemptChange(): void {
+    this.attemptChangeActive = !this.attemptChangeActive;
+  }
+
   clearRemotes(): void {
     this.activeRemotes.clear();
     this.inactiveRemotes.clear();
@@ -309,6 +315,7 @@ export class Platform {
       clock: this.clock.serialize(t),
       votes: this.getRefereeVotes(),
       hasCompleteVoteSet: this.hasCompleteVoteSet(),
+      attemptChangeActive: this.attemptChangeActive,
     };
   }
 }
