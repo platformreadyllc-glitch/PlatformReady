@@ -586,6 +586,35 @@ describe('Platform', () => {
     expect(platform.clock.remaining()).toBe(60.0);
   });
 
+  it('clock button press does not count as a chief vote', () => {
+    const platform = new Platform({ platformId: 'clk6a' });
+    platform.registerRemote('left-1', 'left', { active: true });
+    platform.registerRemote('chief-1', 'chief', { active: true });
+    platform.registerRemote('right-1', 'right', { active: true });
+
+    platform.castVote('left-1', 'white');
+    platform.castVote('right-1', 'white');
+    platform.handleClockButton('chief-1', 0.0);
+
+    expect(platform.getRefereeVotes()['chief']).toBeNull();
+    expect(platform.hasCompleteVoteSet()).toBe(false);
+  });
+
+  it('clock button then vote work independently', () => {
+    const platform = new Platform({ platformId: 'clk6b', decisionDelay: 0 });
+    platform.registerRemote('left-1', 'left', { active: true });
+    platform.registerRemote('chief-1', 'chief', { active: true });
+    platform.registerRemote('right-1', 'right', { active: true });
+
+    platform.handleClockButton('chief-1', 0.0);
+    platform.castVote('left-1', 'white');
+    platform.castVote('chief-1', 'white');
+    platform.castVote('right-1', 'white');
+
+    expect(platform.hasCompleteVoteSet()).toBe(true);
+    expect(platform.getRefereeVotes()['chief']).toBe('white');
+  });
+
   it('serialize includes clock with correct shape', () => {
     const platform = new Platform({ platformId: 'clk6' });
     const data = platform.serialize();
