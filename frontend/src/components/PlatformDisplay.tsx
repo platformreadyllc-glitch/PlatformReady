@@ -24,39 +24,46 @@ export function PlatformDisplay({ platformName, dayStr, votes, revealed, clock }
         <span className="text-[1.2vw] text-secondary">{dayStr}</span>
       </header>
 
-      {/* Main display */}
-      <div className="flex-1 flex flex-col items-center justify-center gap-[6vh]">
-        {/* Referee lights: Left — Chief — Right */}
-        <div className="flex items-start gap-[5vw]">
-          <RefereeLight vote={votes.left} revealed={revealed} />
-          <RefereeLight vote={votes.chief} revealed={revealed} />
-          <RefereeLight vote={votes.right} revealed={revealed} />
-        </div>
-
-        {/* Clock */}
-        <div className="flex flex-col items-center gap-3">
+      {clock.mode === 'ACTIVE' ? (
+        /* ── ACTIVE mode: lights + single clock ── */
+        <div className="flex-1 flex flex-col items-center justify-center gap-[6vh]">
+          <div className="flex items-start gap-[5vw]">
+            <RefereeLight vote={votes.left} revealed={revealed} />
+            <RefereeLight vote={votes.chief} revealed={revealed} />
+            <RefereeLight vote={votes.right} revealed={revealed} />
+          </div>
           <span className={`text-[20vw] [font-family:'DSEG7ClassicBold',monospace] font-bold tabular-nums ${clockColorClass}`}>
             {formatTime(clock.remaining)}
           </span>
+        </div>
+      ) : (
+        /* ── BREAK mode: two timers distributed evenly, no lights ── */
+        <div className="flex-1 flex flex-col items-center justify-evenly">
+          {/* Break remaining */}
+          <div className="flex flex-col items-center gap-2">
+            <span className="text-[1.2vw] text-secondary uppercase tracking-widest">Break</span>
+            <span className={`text-[20vw] [font-family:'DSEG7ClassicBold',monospace] font-bold tabular-nums ${clockColorClass}`}>
+              {formatTime(clock.remaining)}
+            </span>
+          </div>
 
-          {clock.mode === 'BREAK' && clock.openingAttemptsOpen && clock.openingAttemptsRemaining !== null && (
-            <div className="flex flex-col items-center gap-1 mt-6">
+          {/* Opener window or locked indicator */}
+          {clock.openingAttemptsOpen && clock.openingAttemptsRemaining !== null ? (
+            <div className="flex flex-col items-center gap-2">
               <span className="text-[15vw] [font-family:'DSEG7ClassicBold',monospace] font-bold tabular-nums text-red-500">
                 {formatTime(clock.openingAttemptsRemaining)}
               </span>
-              <span className="text-sm text-secondary uppercase tracking-widest">
+              <span className="text-[1.2vw] text-secondary uppercase tracking-widest">
                 Time to change openers
               </span>
             </div>
-          )}
-
-          {clock.mode === 'BREAK' && !clock.openingAttemptsOpen && (
-            <span className="text-sm text-secondary uppercase tracking-widest mt-2">
+          ) : (
+            <span className="text-[2vw] text-secondary uppercase tracking-widest">
               Openers locked
             </span>
           )}
         </div>
-      </div>
+      )}
     </>
   )
 }
