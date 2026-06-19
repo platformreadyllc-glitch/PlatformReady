@@ -232,8 +232,8 @@ export default function PlatformView() {
     <div className="platform-display min-h-screen bg-background flex flex-col">
       {/* Header */}
       <header className="flex items-center justify-between px-8 py-4 border-b border-border">
-        <span className="text-xl font-semibold text-primary tracking-wide">{platformName}</span>
-        <span className="text-sm text-secondary">{dayStr}</span>
+        <span className="text-[2vw] font-semibold text-primary tracking-wide">{platformName}</span>
+        <span className="text-[1.2vw] text-secondary">{dayStr}</span>
       </header>
 
       {/* Main display */}
