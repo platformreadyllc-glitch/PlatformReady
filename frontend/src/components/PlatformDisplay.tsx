@@ -29,20 +29,20 @@ export function PlatformDisplay({ platformName, dayStr, votes, revealed, clock, 
   return (
     <>
       {/* Header */}
-      <header className="flex items-center justify-between px-8 py-4 border-b border-border">
-        <span className="text-[2vw] font-semibold text-primary tracking-wide">{platformName}</span>
+      <header className="flex items-center justify-between px-8 py-1 border-b border-border">
+        <span className="text-[1.5vw] font-semibold text-primary tracking-wide">{platformName}</span>
         <span className="text-[1.2vw] text-secondary">{dayStr}</span>
       </header>
 
       {clock.mode === 'ACTIVE' ? (
         /* ── ACTIVE mode: lights + single clock ── */
-        <div className="flex-1 flex flex-col items-center justify-center gap-[6vh]">
-          <div className="flex items-start gap-[5vw]">
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <div className="flex items-start gap-[6vw]">
             <RefereeLight vote={votes.left} revealed={revealed} />
             <RefereeLight vote={votes.chief} revealed={revealed} />
             <RefereeLight vote={votes.right} revealed={revealed} />
           </div>
-          <span className={`text-[20vw] [font-family:'DSEG7ClassicBold',monospace] font-bold tabular-nums ${clockColorClass}`}>
+          <span className={`text-[15vw] [font-family:'DSEG7ClassicBold',monospace] font-bold tabular-nums ${clockColorClass}`}>
             {formatTime(clock.remaining)}
           </span>
         </div>
@@ -51,10 +51,10 @@ export function PlatformDisplay({ platformName, dayStr, votes, revealed, clock, 
         <div className="flex-1 flex flex-col items-center justify-evenly">
           {/* Break remaining */}
           <div className="flex flex-col items-center gap-2">
-            <span className={`text-[5vw] [font-family:'Orbitron',sans-serif] font-bold tabular-nums ${clockColorClass}`}>
+            <span className={`text-[4vw] [font-family:'Orbitron',sans-serif] font-bold tabular-nums ${clockColorClass}`}>
               FLIGHT A BEGINS:
             </span>
-            <span className={`text-[15vw] [font-family:'DSEG7ClassicBold',monospace] font-bold tabular-nums ${clockColorClass}`}>
+            <span className={`text-[12vw] [font-family:'DSEG7ClassicBold',monospace] font-bold tabular-nums ${clockColorClass}`}>
               {formatTime(clock.remaining)}
             </span>
           </div>
@@ -62,17 +62,17 @@ export function PlatformDisplay({ platformName, dayStr, votes, revealed, clock, 
           {/* Opener window or locked indicator */}
           {clock.openingAttemptsOpen && clock.openingAttemptsRemaining !== null ? (
             <div className="flex flex-col items-center gap-2">
-              <span className="text-[5vw] [font-family:'Orbitron',sans-serif] font-bold tabular-nums text-red-500">
+              <span className="text-[4vw] [font-family:'Orbitron',sans-serif] font-bold tabular-nums text-red-500">
                 FLIGHT A OPENERS CLOSE:
               </span>
-              <span className="text-[15vw] [font-family:'DSEG7ClassicBold',monospace] font-bold tabular-nums text-red-500">
+              <span className="text-[12vw] [font-family:'DSEG7ClassicBold',monospace] font-bold tabular-nums text-red-500">
                 {formatTime(clock.openingAttemptsRemaining)}
               </span>
             </div>
           ) : (
             <div className="flex flex-col items-center [font-family:'Orbitron',sans-serif] font-bold text-red-500">
-              <span className="text-[7vw]">FLIGHT A</span>
-              <span className="text-[7vw]">OPENERS LOCKED</span>
+              <span className="text-[5vw]">FLIGHT A</span>
+              <span className="text-[5vw]">OPENERS LOCKED</span>
             </div>
           )}
         </div>

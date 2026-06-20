@@ -40,9 +40,9 @@ function ChaseRow({
         const tail = offset >= 0 && offset < TAIL.length ? TAIL[offset] : null;
         const style: React.CSSProperties = tail
           ? {
-              background: `rgba(${LIT_COLOR}, ${tail.alpha})`,
-              boxShadow: tail.glow ? `${tail.glow} rgba(${LIT_COLOR}, ${tail.alpha * 0.9})` : "none",
-            }
+            background: `rgba(${LIT_COLOR}, ${tail.alpha})`,
+            boxShadow: tail.glow ? `${tail.glow} rgba(${LIT_COLOR}, ${tail.alpha * 0.9})` : "none",
+          }
           : { background: "transparent", boxShadow: "none" };
         return <div className="ac-cell" key={i} style={style} />;
       })}
@@ -245,8 +245,8 @@ const STYLES = `
   position: relative;
   display: flex;
   gap: 0.4vw;
-  height: 3vh;
-  margin: 0 3vw;
+  height: 5vh;
+  margin: 0 1vw;
   z-index: 2;
 }
 .ac-row[data-row="top"] { margin-bottom: 3vh; }
@@ -270,7 +270,7 @@ const STYLES = `
 .ac-main {
   font-family: 'Orbitron', sans-serif;
   text-transform: uppercase;
-  font-size: 15vw;
+  font-size: 12vw;
   font-weight: 500;
   letter-spacing: 0.3vw;
   color: #f0f0f0;
@@ -279,7 +279,7 @@ const STYLES = `
 .ac-ghost {
   font-family: 'Orbitron', sans-serif;
   text-transform: uppercase;
-  font-size: 15vw;
+  font-size: 12vw;
   font-weight: 500;
   letter-spacing: 0.3vw;
   position: absolute;
