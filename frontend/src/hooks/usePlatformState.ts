@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { dayLabel } from '@/lib/platformHelpers'
 import {
-  ACTIVE_DURATION,
   INITIAL_CLOCK,
   INITIAL_VOTES,
   KEY_MAP,
@@ -67,7 +66,7 @@ export function usePlatformState(id: string | undefined, inputEnabled = true): P
 
   // ── Frontend-only display state ───────────────────────────────────────────
   const [revealed, setRevealed] = useState(false)
-  const [localRemaining, setLocalRemaining] = useState(ACTIVE_DURATION)
+  const [localRemaining, setLocalRemaining] = useState<number | null>(null)
 
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const resetTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -112,7 +111,7 @@ export function usePlatformState(id: string | undefined, inputEnabled = true): P
   useEffect(() => {
     if (backendState?.clock.state !== 'RUNNING') return
     const interval = setInterval(() => {
-      setLocalRemaining((prev) => Math.max(0, prev - 0.1))
+      setLocalRemaining((prev) => prev === null ? null : Math.max(0, prev - 0.1))
     }, 100)
     return () => clearInterval(interval)
   }, [backendState?.clock.state])
@@ -157,16 +156,18 @@ export function usePlatformState(id: string | undefined, inputEnabled = true): P
       }
     : INITIAL_VOTES
 
+  const remaining = localRemaining ?? backendState?.clock.remaining ?? 0
+
   const clock: ClockSnapshot = backendState
     ? {
         mode: backendState.clock.mode,
         state: backendState.clock.state,
-        remaining: localRemaining,
+        remaining,
         openingAttemptsOpen: backendState.clock.mode === 'BREAK'
-          ? localRemaining > OPENER_LOCK_CUTOFF
+          ? remaining > OPENER_LOCK_CUTOFF
           : false,
         openingAttemptsRemaining: backendState.clock.mode === 'BREAK'
-          ? Math.max(0, localRemaining - OPENER_LOCK_CUTOFF)
+          ? Math.max(0, remaining - OPENER_LOCK_CUTOFF)
           : null,
       }
     : INITIAL_CLOCK
