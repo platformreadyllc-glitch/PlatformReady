@@ -82,11 +82,10 @@ export default function ScoreTableView() {
                   <button
                     key={mins}
                     onClick={() => selectDuration(mins)}
-                    className={`flex-1 py-3 rounded-lg text-lg font-bold font-mono transition-colors ${
-                      selectedMinutes === mins
-                        ? 'bg-accent text-accent-text'
-                        : 'bg-background border border-border text-primary hover:border-accent'
-                    }`}
+                    className={`flex-1 py-3 rounded-lg text-lg font-bold font-mono transition-colors ${selectedMinutes === mins
+                      ? 'bg-accent text-accent-text'
+                      : 'bg-background border border-border text-primary hover:border-accent'
+                      }`}
                   >
                     {mins}:00
                   </button>
@@ -98,11 +97,10 @@ export default function ScoreTableView() {
               <button
                 onClick={confirmDuration}
                 disabled={controlStep === 'start'}
-                className={`w-full py-3 rounded-lg font-semibold transition-colors ${
-                  controlStep === 'start'
-                    ? 'bg-surface border border-border text-secondary cursor-default'
-                    : 'bg-surface border border-accent text-accent hover:bg-accent hover:text-accent-text'
-                }`}
+                className={`w-full py-3 rounded-lg font-semibold transition-colors ${controlStep === 'start'
+                  ? 'bg-surface border border-border text-secondary cursor-default'
+                  : 'bg-surface border border-accent text-accent hover:bg-accent hover:text-accent-text'
+                  }`}
               >
                 Confirm {selectedMinutes}:00
               </button>
@@ -132,11 +130,10 @@ export default function ScoreTableView() {
             <span className="text-xs uppercase tracking-widest text-secondary text-center">Attempt Change Alert</span>
             <button
               onClick={handleToggleAttemptChange}
-              className={`w-full py-3 rounded-lg font-semibold transition-colors ${
-                attemptChangeActive
-                  ? 'bg-surface border border-border text-primary hover:border-accent hover:text-accent'
-                  : 'bg-amber-500 text-white hover:bg-amber-600'
-              }`}
+              className={`w-full py-3 rounded-lg font-semibold transition-colors ${attemptChangeActive
+                ? 'bg-surface border border-border text-primary hover:border-accent hover:text-accent'
+                : 'bg-amber-500 text-white hover:bg-amber-600'
+                }`}
             >
               {attemptChangeActive ? 'Stop Alert' : 'Activate Alert'}
             </button>
@@ -155,20 +152,19 @@ export default function ScoreTableView() {
             onClick={panelOpen ? closePanel : openPanel}
             className="px-5 py-2 rounded-lg text-sm font-medium bg-surface border border-border text-secondary hover:text-primary hover:border-accent transition-colors"
           >
-            Controls
+            Break Clock
           </button>
           <button
             onClick={() => {
               setPanelOpen(false)
               setAttemptChangePanelOpen((o) => !o)
             }}
-            className={`px-5 py-2 rounded-lg text-sm font-medium border transition-colors ${
-              attemptChangeActive
-                ? 'bg-amber-500 border-amber-500 text-white hover:bg-amber-600'
-                : 'bg-surface border-border text-secondary hover:text-primary hover:border-amber-500'
-            }`}
+            className={`px-5 py-2 rounded-lg text-sm font-medium border transition-colors ${attemptChangeActive
+              ? 'bg-amber-500 border-amber-500 text-white hover:bg-amber-600'
+              : 'bg-surface border-border text-secondary hover:text-primary hover:border-amber-500'
+              }`}
           >
-            Attempt Change
+            DL3 Attempt Change
           </button>
         </div>
       </div>
