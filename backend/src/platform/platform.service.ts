@@ -166,12 +166,13 @@ export class PlatformService {
       clearTimeout(this.breakTimers.get(platformId)!);
     }
     const timer = setTimeout(() => {
+      this.breakTimers.delete(platformId);
+      if (!this.manager.hasPlatform(platformId)) return;
       const platform = this.manager.getPlatform(platformId);
       if (platform.clock.mode === ClockMode.BREAK) {
         platform.clock.resetToActive();
         this.gateway.emitPlatformUpdate(platformId, platform.serialize());
       }
-      this.breakTimers.delete(platformId);
     }, durationSeconds * 1000);
     this.breakTimers.set(platformId, timer);
   }
