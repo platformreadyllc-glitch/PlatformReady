@@ -807,4 +807,30 @@ describe('PlatformManager', () => {
     expect(() => p1.castVote('left-1', 'white')).toThrow('break');
     expect(() => p2.castVote('left-2', 'white')).not.toThrow();
   });
+
+  it('hasPlatform returns false after removePlatform', () => {
+    const manager = new PlatformManager();
+    const p = new Platform({ platformId: 'rm1' });
+    manager.addPlatform(p);
+    expect(manager.hasPlatform('rm1')).toBe(true);
+    manager.removePlatform('rm1');
+    expect(manager.hasPlatform('rm1')).toBe(false);
+  });
+});
+
+describe('Platform.resetVotes', () => {
+  it('does not clear attemptChangeActive', () => {
+    const platform = new Platform({ platformId: 'rv-ac-1' });
+    platform.toggleAttemptChange();
+    platform.resetVotes();
+    expect(platform.attemptChangeActive).toBe(true);
+  });
+
+  it('does not restart clock when in BREAK mode', () => {
+    const platform = new Platform({ platformId: 'rv-brk-1' });
+    platform.clock.configureBreak(600.0);
+    platform.clock.start();
+    platform.resetVotes();
+    expect(platform.clock.mode).toBe(ClockMode.BREAK);
+  });
 });
