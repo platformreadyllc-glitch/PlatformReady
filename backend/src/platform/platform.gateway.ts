@@ -6,7 +6,9 @@ import {
 import { Server, Socket } from 'socket.io';
 import { PlatformSerialized } from './models/platform';
 
-@WebSocketGateway({ cors: { origin: process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173' } })
+@WebSocketGateway({
+  cors: { origin: process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173' },
+})
 export class PlatformGateway {
   @WebSocketServer()
   server: Server;

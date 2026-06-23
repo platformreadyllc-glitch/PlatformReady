@@ -635,7 +635,9 @@ describe('Platform', () => {
     const platform = new Platform({ platformId: 'idle-vote-1' });
     platform.registerRemote('left-1', 'left', { active: true });
     // Clock starts ACTIVE IDLE by default
-    expect(() => platform.castVote('left-1', 'white')).toThrow('clock has started');
+    expect(() => platform.castVote('left-1', 'white')).toThrow(
+      'clock has started',
+    );
   });
 
   it('castVote succeeds once clock is running', () => {
@@ -676,14 +678,18 @@ describe('Platform', () => {
     platform.registerRemote('chief-1', 'chief', { active: true });
     platform.handleClockButton('chief-1', 0.0);
     platform.toggleAttemptChange();
-    expect(() => platform.castVote('left-1', 'white')).toThrow('attempt change');
+    expect(() => platform.castVote('left-1', 'white')).toThrow(
+      'attempt change',
+    );
   });
 
   it('handleClockButton throws when attempt change is active', () => {
     const platform = new Platform({ platformId: 'ac-4' });
     platform.registerRemote('chief-1', 'chief', { active: true });
     platform.toggleAttemptChange();
-    expect(() => platform.handleClockButton('chief-1')).toThrow('attempt change');
+    expect(() => platform.handleClockButton('chief-1')).toThrow(
+      'attempt change',
+    );
   });
 
   it('votes are allowed again after attempt change is deactivated', () => {

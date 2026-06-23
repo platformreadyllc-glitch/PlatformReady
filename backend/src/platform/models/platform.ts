@@ -1,4 +1,11 @@
-import { Role, Button, ACTIVE_ROLES, VALID_ROLES, ClockMode, ClockState } from './enums';
+import {
+  Role,
+  Button,
+  ACTIVE_ROLES,
+  VALID_ROLES,
+  ClockMode,
+  ClockState,
+} from './enums';
 import { Remote } from './remote';
 import { PlatformClock } from './platform-clock';
 import { determineDecisionOutcome, DecisionOutcome } from './decisions';

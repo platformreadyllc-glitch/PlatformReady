@@ -14,7 +14,10 @@ import { PlatformGateway } from './platform.gateway';
 @Injectable()
 export class PlatformService {
   private readonly manager = new PlatformManager();
-  private readonly breakTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly breakTimers = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
 
   constructor(private readonly gateway: PlatformGateway) {}
 
@@ -37,7 +40,10 @@ export class PlatformService {
       return this.manager.getPlatform(dto.platformId).serialize();
     }
     try {
-      const platform = new Platform({ platformId: dto.platformId, name: dto.name });
+      const platform = new Platform({
+        platformId: dto.platformId,
+        name: dto.name,
+      });
       this.manager.addPlatform(platform);
       platform.registerRemote('kb-left', 'left' as Role);
       platform.registerRemote('kb-chief', 'chief' as Role);
