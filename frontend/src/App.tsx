@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Monitor, Moon, Sun } from 'lucide-react'
 import { BrowserRouter, NavLink, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { useTheme, THEMES, type Theme } from '@/hooks/useTheme'
+import { STORAGE_KEY, type StoredMeetConfig } from '@/lib/platformTypes'
 import MeetSetup from '@/pages/MeetSetup'
 import PlatformView from '@/pages/PlatformView'
 import ScoreTableView from '@/pages/ScoreTableView'
@@ -28,10 +29,10 @@ const indentedNavLinkClass = ({ isActive }: { isActive: boolean }) =>
 
 function readActivePlatforms(): Array<{ name: string }> {
   try {
-    const raw = localStorage.getItem('platformready_meet')
+    const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return []
-    const config = JSON.parse(raw)
-    const platforms: Array<{ name: string; active: boolean }> = config.days?.[0]?.platforms ?? []
+    const config: StoredMeetConfig = JSON.parse(raw)
+    const platforms = config.days?.[0]?.platforms ?? []
     return platforms.filter((p) => p.active)
   } catch {
     return []
