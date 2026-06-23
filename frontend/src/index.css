@@ -104,6 +104,18 @@
   font-weight: 400;
 }
 
+@font-face {
+  font-family: 'DSEG14ModernRegular';
+  src: url('/fonts/DSEG14Modern-Regular.ttf') format('truetype');
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: 'DSEG14ClassicMiniRegular';
+  src: url('/fonts/DSEG14ClassicMini-Regular.ttf') format('truetype');
+  font-weight: 400;
+}
+
 body {
   background-color: var(--background);
   color: var(--text-primary);

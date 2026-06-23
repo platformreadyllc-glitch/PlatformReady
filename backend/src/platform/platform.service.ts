@@ -5,13 +5,21 @@ import {
 } from '@nestjs/common';
 import { PlatformManager } from './models/platform-manager';
 import { Platform } from './models/platform';
-import { Button, Role } from './models/enums';
+import { Button, Role, ClockMode } from './models/enums';
 import { CreatePlatformDto } from './dto/create-platform.dto';
 import { RegisterRemoteDto } from './dto/register-remote.dto';
+import { EnsurePlatformDto } from './dto/ensure-platform.dto';
+import { PlatformGateway } from './platform.gateway';
 
 @Injectable()
 export class PlatformService {
   private readonly manager = new PlatformManager();
+  private readonly breakTimers = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
+
+  constructor(private readonly gateway: PlatformGateway) {}
 
   createPlatform(dto: CreatePlatformDto): Platform {
     try {
@@ -22,6 +30,25 @@ export class PlatformService {
       });
       this.manager.addPlatform(platform);
       return platform;
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
+  }
+
+  ensurePlatform(dto: EnsurePlatformDto) {
+    if (this.manager.hasPlatform(dto.platformId)) {
+      return this.manager.getPlatform(dto.platformId).serialize();
+    }
+    try {
+      const platform = new Platform({
+        platformId: dto.platformId,
+        name: dto.name,
+      });
+      this.manager.addPlatform(platform);
+      platform.registerRemote('kb-left', 'left' as Role);
+      platform.registerRemote('kb-chief', 'chief' as Role);
+      platform.registerRemote('kb-right', 'right' as Role);
+      return platform.serialize();
     } catch (e) {
       throw new BadRequestException((e as Error).message);
     }
@@ -67,6 +94,7 @@ export class PlatformService {
     try {
       platform.castVote(remoteId, button);
       const outcome = platform.tryDetermineOutcome();
+      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
       return { votes: platform.getRefereeVotes(), outcome: outcome ?? null };
     } catch (e) {
       throw new BadRequestException((e as Error).message);
@@ -77,16 +105,48 @@ export class PlatformService {
     const platform = this.getPlatform(platformId);
     try {
       platform.handleClockButton(remoteId);
+      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
       return platform.clock.serialize();
     } catch (e) {
       throw new BadRequestException((e as Error).message);
     }
   }
 
+  resetAttempt(platformId: string) {
+    const platform = this.getPlatform(platformId);
+    platform.resetVotes();
+    if (platform.clock.mode !== ClockMode.BREAK) {
+      platform.clock.resetToActive();
+    }
+    this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+    return platform.serialize();
+  }
+
+  toggleAttemptChange(platformId: string) {
+    const platform = this.getPlatform(platformId);
+    platform.toggleAttemptChange();
+    this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+    return platform.serialize();
+  }
+
   substituteSpare(platformId: string, targetRole: Role) {
     const platform = this.getPlatform(platformId);
     try {
       platform.substituteSpare(targetRole);
+      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+      return platform.serialize();
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
+  }
+
+  startPlatformBreak(platformId: string, durationSeconds: number) {
+    const platform = this.getPlatform(platformId);
+    try {
+      platform.clock.configureBreak(durationSeconds);
+      platform.clock.start();
+      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+      this.scheduleBreakReset(platformId, durationSeconds);
       return platform.serialize();
     } catch (e) {
       throw new BadRequestException((e as Error).message);
@@ -96,9 +156,30 @@ export class PlatformService {
   startGlobalBreak(durationSeconds: number) {
     try {
       this.manager.startGlobalBreak(durationSeconds);
-      return this.manager.serializeAll();
+      const all = this.manager.serializeAll();
+      this.gateway.emitGlobalUpdate(all);
+      for (const platform of this.manager.listPlatforms()) {
+        this.scheduleBreakReset(platform.platformId, durationSeconds);
+      }
+      return all;
     } catch (e) {
       throw new BadRequestException((e as Error).message);
     }
+  }
+
+  private scheduleBreakReset(platformId: string, durationSeconds: number) {
+    if (this.breakTimers.has(platformId)) {
+      clearTimeout(this.breakTimers.get(platformId)!);
+    }
+    const timer = setTimeout(() => {
+      this.breakTimers.delete(platformId);
+      if (!this.manager.hasPlatform(platformId)) return;
+      const platform = this.manager.getPlatform(platformId);
+      if (platform.clock.mode === ClockMode.BREAK) {
+        platform.clock.resetToActive();
+        this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+      }
+    }, durationSeconds * 1000);
+    this.breakTimers.set(platformId, timer);
   }
 }

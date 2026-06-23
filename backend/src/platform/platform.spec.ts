@@ -401,6 +401,7 @@ describe('Platform', () => {
     platform.registerRemote('left', 'left', { active: true });
     platform.registerRemote('chief', 'chief', { active: true });
     platform.registerRemote('right', 'right', { active: true });
+    platform.handleClockButton('chief', 0.0);
 
     platform.castVote('left', 'white');
     expect(platform.getRemote('left').lastButtonPressed).toBe('white');
@@ -436,6 +437,7 @@ describe('Platform', () => {
     platform.registerRemote('left-1', 'left', { active: true });
     platform.registerRemote('chief-1', 'chief', { active: true });
     platform.registerRemote('right-1', 'right', { active: true });
+    platform.clock.start(0.0);
 
     platform.castVote('left-1', 'white');
     platform.castVote('chief-1', 'red');
@@ -462,6 +464,7 @@ describe('Platform', () => {
     platform.registerRemote('chief-1', 'chief', { active: true });
     platform.registerRemote('right-1', 'right', { active: true });
 
+    platform.clock.start(0.0);
     platform.castVote('left-1', 'red');
     platform.castVote('chief-1', 'red');
     platform.castVote('right-1', 'red');
@@ -469,7 +472,9 @@ describe('Platform', () => {
     expect(first).not.toBeNull();
     expect(first!.outcome).toBe('bad');
 
+    // tryDetermineOutcome resets clock to IDLE; restart before voting again
     platform.resetVotes();
+    platform.clock.start(performance.now() / 1000);
 
     platform.castVote('left-1', 'white');
     platform.castVote('chief-1', 'white');
@@ -525,6 +530,7 @@ describe('Platform', () => {
     platform.registerRemote('spare-1', 'spare', { isSpare: true });
 
     const spare = platform.substituteSpare('chief');
+    platform.clock.start(0.0);
 
     platform.castVote('left-1', 'white');
     platform.castVote('right-1', 'white');
@@ -584,6 +590,124 @@ describe('Platform', () => {
     expect(platform.clock.mode).toBe(ClockMode.ACTIVE);
     expect(platform.clock.state()).toBe(ClockState.IDLE);
     expect(platform.clock.remaining()).toBe(60.0);
+  });
+
+  it('clock button press does not count as a chief vote', () => {
+    const platform = new Platform({ platformId: 'clk6a' });
+    platform.registerRemote('left-1', 'left', { active: true });
+    platform.registerRemote('chief-1', 'chief', { active: true });
+    platform.registerRemote('right-1', 'right', { active: true });
+
+    // Start clock so votes are accepted, then chief presses clock (resets it)
+    platform.clock.start(0.0);
+    platform.castVote('left-1', 'white');
+    platform.castVote('right-1', 'white');
+    platform.handleClockButton('chief-1', 0.0);
+
+    expect(platform.getRefereeVotes()['chief']).toBeNull();
+    expect(platform.hasCompleteVoteSet()).toBe(false);
+  });
+
+  it('clock button then vote work independently', () => {
+    const platform = new Platform({ platformId: 'clk6b', decisionDelay: 0 });
+    platform.registerRemote('left-1', 'left', { active: true });
+    platform.registerRemote('chief-1', 'chief', { active: true });
+    platform.registerRemote('right-1', 'right', { active: true });
+
+    platform.handleClockButton('chief-1', 0.0);
+    platform.castVote('left-1', 'white');
+    platform.castVote('chief-1', 'white');
+    platform.castVote('right-1', 'white');
+
+    expect(platform.hasCompleteVoteSet()).toBe(true);
+    expect(platform.getRefereeVotes()['chief']).toBe('white');
+  });
+
+  it('castVote throws during break mode', () => {
+    const platform = new Platform({ platformId: 'brk-vote-1' });
+    platform.registerRemote('left-1', 'left', { active: true });
+    platform.clock.configureBreak(600.0);
+    platform.clock.start();
+    expect(() => platform.castVote('left-1', 'white')).toThrow('break');
+  });
+
+  it('castVote throws when clock is idle', () => {
+    const platform = new Platform({ platformId: 'idle-vote-1' });
+    platform.registerRemote('left-1', 'left', { active: true });
+    // Clock starts ACTIVE IDLE by default
+    expect(() => platform.castVote('left-1', 'white')).toThrow(
+      'clock has started',
+    );
+  });
+
+  it('castVote succeeds once clock is running', () => {
+    const platform = new Platform({ platformId: 'idle-vote-2' });
+    platform.registerRemote('chief-1', 'chief', { active: true });
+    platform.registerRemote('left-1', 'left', { active: true });
+    platform.handleClockButton('chief-1', 0.0);
+    expect(() => platform.castVote('left-1', 'white')).not.toThrow();
+  });
+
+  it('handleClockButton throws during break mode', () => {
+    const platform = new Platform({ platformId: 'brk-clk-1' });
+    platform.registerRemote('chief-1', 'chief', { active: true });
+    platform.clock.configureBreak(600.0);
+    platform.clock.start();
+    expect(() => platform.handleClockButton('chief-1')).toThrow('break');
+  });
+
+  it('toggleAttemptChange flips active state', () => {
+    const platform = new Platform({ platformId: 'ac-1' });
+    expect(platform.attemptChangeActive).toBe(false);
+    platform.toggleAttemptChange();
+    expect(platform.attemptChangeActive).toBe(true);
+    platform.toggleAttemptChange();
+    expect(platform.attemptChangeActive).toBe(false);
+  });
+
+  it('attemptChangeActive is included in serialize', () => {
+    const platform = new Platform({ platformId: 'ac-2' });
+    expect(platform.serialize().attemptChangeActive).toBe(false);
+    platform.toggleAttemptChange();
+    expect(platform.serialize().attemptChangeActive).toBe(true);
+  });
+
+  it('castVote throws when attempt change is active', () => {
+    const platform = new Platform({ platformId: 'ac-3' });
+    platform.registerRemote('left-1', 'left', { active: true });
+    platform.registerRemote('chief-1', 'chief', { active: true });
+    platform.handleClockButton('chief-1', 0.0);
+    platform.toggleAttemptChange();
+    expect(() => platform.castVote('left-1', 'white')).toThrow(
+      'attempt change',
+    );
+  });
+
+  it('handleClockButton throws when attempt change is active', () => {
+    const platform = new Platform({ platformId: 'ac-4' });
+    platform.registerRemote('chief-1', 'chief', { active: true });
+    platform.toggleAttemptChange();
+    expect(() => platform.handleClockButton('chief-1')).toThrow(
+      'attempt change',
+    );
+  });
+
+  it('votes are allowed again after attempt change is deactivated', () => {
+    const platform = new Platform({ platformId: 'ac-5' });
+    platform.registerRemote('left-1', 'left', { active: true });
+    platform.registerRemote('chief-1', 'chief', { active: true });
+    platform.handleClockButton('chief-1', 0.0);
+    platform.toggleAttemptChange();
+    platform.toggleAttemptChange();
+    expect(() => platform.castVote('left-1', 'white')).not.toThrow();
+  });
+
+  it('clock is controllable again after attempt change is deactivated', () => {
+    const platform = new Platform({ platformId: 'ac-6' });
+    platform.registerRemote('chief-1', 'chief', { active: true });
+    platform.toggleAttemptChange();
+    platform.toggleAttemptChange();
+    expect(() => platform.handleClockButton('chief-1')).not.toThrow();
   });
 
   it('serialize includes clock with correct shape', () => {
@@ -655,5 +779,64 @@ describe('PlatformManager', () => {
     // Both clocks should have very close remaining times (same start timestamp)
     const diff = Math.abs(p1.clock.remaining() - p2.clock.remaining());
     expect(diff).toBeLessThan(0.01);
+  });
+
+  it('global break blocks votes on all platforms', () => {
+    const manager = new PlatformManager();
+    const p1 = new Platform({ platformId: 'gb1' });
+    const p2 = new Platform({ platformId: 'gb2' });
+    p1.registerRemote('left-1', 'left', { active: true });
+    p2.registerRemote('left-2', 'left', { active: true });
+    manager.addPlatform(p1);
+    manager.addPlatform(p2);
+
+    manager.startGlobalBreak(600.0);
+
+    expect(() => p1.castVote('left-1', 'white')).toThrow('break');
+    expect(() => p2.castVote('left-2', 'white')).toThrow('break');
+  });
+
+  it('break on one platform does not block votes on another', () => {
+    const manager = new PlatformManager();
+    const p1 = new Platform({ platformId: 'iso1' });
+    const p2 = new Platform({ platformId: 'iso2' });
+    p1.registerRemote('left-1', 'left', { active: true });
+    p2.registerRemote('left-2', 'left', { active: true });
+    manager.addPlatform(p1);
+    manager.addPlatform(p2);
+
+    // Only p1 goes into break; p2 stays in ACTIVE and must have clock running for votes
+    p1.clock.configureBreak(600.0);
+    p1.clock.start();
+    p2.clock.start();
+
+    expect(() => p1.castVote('left-1', 'white')).toThrow('break');
+    expect(() => p2.castVote('left-2', 'white')).not.toThrow();
+  });
+
+  it('hasPlatform returns false after removePlatform', () => {
+    const manager = new PlatformManager();
+    const p = new Platform({ platformId: 'rm1' });
+    manager.addPlatform(p);
+    expect(manager.hasPlatform('rm1')).toBe(true);
+    manager.removePlatform('rm1');
+    expect(manager.hasPlatform('rm1')).toBe(false);
+  });
+});
+
+describe('Platform.resetVotes', () => {
+  it('does not clear attemptChangeActive', () => {
+    const platform = new Platform({ platformId: 'rv-ac-1' });
+    platform.toggleAttemptChange();
+    platform.resetVotes();
+    expect(platform.attemptChangeActive).toBe(true);
+  });
+
+  it('does not restart clock when in BREAK mode', () => {
+    const platform = new Platform({ platformId: 'rv-brk-1' });
+    platform.clock.configureBreak(600.0);
+    platform.clock.start();
+    platform.resetVotes();
+    expect(platform.clock.mode).toBe(ClockMode.BREAK);
   });
 });

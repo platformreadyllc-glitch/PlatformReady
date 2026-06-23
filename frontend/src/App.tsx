@@ -4,6 +4,7 @@ import { BrowserRouter, NavLink, Outlet, Route, Routes, useLocation } from 'reac
 import { useTheme, THEMES, type Theme } from '@/hooks/useTheme'
 import MeetSetup from '@/pages/MeetSetup'
 import PlatformView from '@/pages/PlatformView'
+import ScoreTableView from '@/pages/ScoreTableView'
 
 const THEME_META: Record<Theme, { icon: React.ReactNode; label: string }> = {
   midnight: { icon: <Moon size={16} />, label: 'Midnight' },
@@ -17,6 +18,11 @@ function nextTheme(t: Theme): Theme {
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+    isActive ? 'bg-nav-active text-primary' : 'text-secondary hover:bg-nav-hover hover:text-primary'
+  }`
+
+const indentedNavLinkClass = ({ isActive }: { isActive: boolean }) =>
+  `pl-6 pr-3 py-1.5 rounded-md text-sm transition-colors ${
     isActive ? 'bg-nav-active text-primary' : 'text-secondary hover:bg-nav-hover hover:text-primary'
   }`
 
@@ -50,9 +56,17 @@ function Layout() {
 
         {activePlatforms.length > 0 ? (
           activePlatforms.map((p, i) => (
-            <NavLink key={i} to={`/platform/${i + 1}`} className={navLinkClass}>
-              {p.name || `Platform ${i + 1}`}
-            </NavLink>
+            <div key={i} className="flex flex-col gap-0.5">
+              <span className="px-3 pt-3 pb-1 text-xs font-semibold uppercase tracking-widest text-secondary">
+                {p.name || `Platform ${i + 1}`}
+              </span>
+              <NavLink to={`/platform/${i + 1}`} className={indentedNavLinkClass}>
+                Platform Display
+              </NavLink>
+              <NavLink to={`/platform/${i + 1}/scoring`} className={indentedNavLinkClass}>
+                Scoring Table
+              </NavLink>
+            </div>
           ))
         ) : (
           <NavLink to="/platform/1" className={navLinkClass}>
@@ -95,8 +109,9 @@ export default function App() {
           <Route index element={<MeetSetup />} />
           <Route path="/controls" element={<Placeholder name="Controls" />} />
         </Route>
-        {/* Platform view renders without the sidebar — full-screen display for TVs */}
+        {/* Platform pages render without the sidebar — full-screen display for TVs */}
         <Route path="/platform/:id" element={<PlatformView />} />
+        <Route path="/platform/:id/scoring" element={<ScoreTableView />} />
       </Routes>
     </BrowserRouter>
   )

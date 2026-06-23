@@ -1,4 +1,11 @@
-import { Role, Button, ACTIVE_ROLES, VALID_ROLES } from './enums';
+import {
+  Role,
+  Button,
+  ACTIVE_ROLES,
+  VALID_ROLES,
+  ClockMode,
+  ClockState,
+} from './enums';
 import { Remote } from './remote';
 import { PlatformClock } from './platform-clock';
 import { determineDecisionOutcome, DecisionOutcome } from './decisions';
@@ -21,6 +28,7 @@ export interface PlatformSerialized {
   clock: ReturnType<PlatformClock['serialize']>;
   votes: Record<string, Button | null>;
   hasCompleteVoteSet: boolean;
+  attemptChangeActive: boolean;
 }
 
 export class Platform {
@@ -31,6 +39,7 @@ export class Platform {
   inactiveRemotes: Map<string, Remote> = new Map();
   decisionDelay: number;
   clock: PlatformClock = new PlatformClock();
+  attemptChangeActive = false;
   private _decisionReadyAt: number | null = null;
 
   constructor(params: {
@@ -144,6 +153,15 @@ export class Platform {
     if (buttonName === 'clock') {
       throw new Error('Use handleClockButton for clock presses');
     }
+    if (this.clock.mode === ClockMode.BREAK) {
+      throw new Error('Cannot cast votes during break');
+    }
+    if (this.attemptChangeActive) {
+      throw new Error('Cannot cast votes during attempt change');
+    }
+    if (this.clock.state() === ClockState.IDLE) {
+      throw new Error('Cannot cast votes before the clock has started');
+    }
     remote.pressButton(buttonName);
 
     if (this.hasCompleteVoteSet()) {
@@ -155,7 +173,8 @@ export class Platform {
     const votes: Record<string, Button | null> = {};
     for (const remote of this.activeRemotes.values()) {
       if (ACTIVE_ROLES.has(remote.role)) {
-        votes[remote.role] = remote.lastButtonPressed;
+        const btn = remote.lastButtonPressed;
+        votes[remote.role] = btn === 'clock' ? null : btn;
       }
     }
     return votes;
@@ -232,6 +251,12 @@ export class Platform {
     if (!remote.hasClockButton) {
       throw new Error(`Remote ${remoteId} does not have a clock button`);
     }
+    if (this.clock.mode === ClockMode.BREAK) {
+      throw new Error('Cannot control clock during break');
+    }
+    if (this.attemptChangeActive) {
+      throw new Error('Cannot control clock during attempt change');
+    }
     remote.pressButton('clock');
     this.clock.handleChiefClockPress(atTime);
   }
@@ -274,6 +299,10 @@ export class Platform {
     return new Map([...this.activeRemotes, ...this.inactiveRemotes]);
   }
 
+  toggleAttemptChange(): void {
+    this.attemptChangeActive = !this.attemptChangeActive;
+  }
+
   clearRemotes(): void {
     this.activeRemotes.clear();
     this.inactiveRemotes.clear();
@@ -299,6 +328,7 @@ export class Platform {
       clock: this.clock.serialize(t),
       votes: this.getRefereeVotes(),
       hasCompleteVoteSet: this.hasCompleteVoteSet(),
+      attemptChangeActive: this.attemptChangeActive,
     };
   }
 }
