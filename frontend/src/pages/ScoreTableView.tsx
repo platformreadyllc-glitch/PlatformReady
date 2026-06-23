@@ -15,7 +15,7 @@ export default function ScoreTableView() {
   const [attemptChangePanelOpen, setAttemptChangePanelOpen] = useState(false)
 
   const anyPanelOpen = panelOpen || attemptChangePanelOpen
-  const { config, votes, revealed, clock, attemptChangeActive, startBreakCountdown, toggleAttemptChange } =
+  const { config, votes, revealed, clock, connected, attemptChangeActive, startBreakCountdown, toggleAttemptChange } =
     usePlatformState(id, !anyPanelOpen)
 
   function openPanel() {
@@ -171,6 +171,12 @@ export default function ScoreTableView() {
       </div>
 
       <KeyboardHintOverlay />
+
+      {!connected && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 bg-red-600 text-white text-xs font-semibold px-3 py-1 rounded-full">
+          DISCONNECTED
+        </div>
+      )}
     </div>
   )
 }
