@@ -1,21 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
+import type { ClockSnapshot } from '@/lib/platformTypes'
 
 const API = 'http://localhost:3000'
-
-export interface BackendClock {
-  mode: 'ACTIVE' | 'BREAK'
-  state: 'IDLE' | 'RUNNING' | 'EXPIRED'
-  remaining: number
-  duration: number
-  openingAttemptsOpen: boolean
-  openingAttemptsRemaining: number | null
-}
 
 export interface BackendPlatformState {
   platformId: string
   name: string | null
-  clock: BackendClock
+  clock: ClockSnapshot
   votes: Record<string, string | null>
   hasCompleteVoteSet: boolean
   attemptChangeActive: boolean

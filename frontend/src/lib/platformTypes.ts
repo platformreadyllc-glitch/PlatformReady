@@ -20,6 +20,7 @@ export interface ClockSnapshot {
   remaining: number
   openingAttemptsOpen: boolean
   openingAttemptsRemaining: number | null
+  duration?: number
 }
 
 export const ACTIVE_DURATION = 60
