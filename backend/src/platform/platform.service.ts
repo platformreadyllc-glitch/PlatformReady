@@ -18,6 +18,7 @@ export class PlatformService {
     string,
     ReturnType<typeof setTimeout>
   >();
+  private globalBreak: { startedAt: number; duration: number } | null = null;
 
   constructor(private readonly gateway: PlatformGateway) {}
 
@@ -48,6 +49,22 @@ export class PlatformService {
       platform.registerRemote('kb-left', 'left' as Role);
       platform.registerRemote('kb-chief', 'chief' as Role);
       platform.registerRemote('kb-right', 'right' as Role);
+
+      // If a global break is in progress, sync this platform into it so it
+      // can't accept votes while all other platforms are locked.
+      // Per-platform breaks are intentionally NOT inherited here.
+      if (this.globalBreak) {
+        const elapsed = performance.now() / 1000 - this.globalBreak.startedAt;
+        const remaining = Math.max(0, this.globalBreak.duration - elapsed);
+        if (remaining > 0) {
+          platform.clock.configureBreak(remaining);
+          platform.clock.start();
+          this.scheduleBreakReset(dto.platformId, remaining);
+        } else {
+          this.globalBreak = null;
+        }
+      }
+
       return platform.serialize();
     } catch (e) {
       throw new BadRequestException((e as Error).message);
@@ -155,6 +172,10 @@ export class PlatformService {
 
   startGlobalBreak(durationSeconds: number) {
     try {
+      this.globalBreak = {
+        startedAt: performance.now() / 1000,
+        duration: durationSeconds,
+      };
       this.manager.startGlobalBreak(durationSeconds);
       const all = this.manager.serializeAll();
       this.gateway.emitGlobalUpdate(all);
