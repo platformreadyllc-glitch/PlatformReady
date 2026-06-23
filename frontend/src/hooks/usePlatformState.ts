@@ -105,7 +105,19 @@ export function usePlatformState(id: string | undefined, inputEnabled = true): P
     }
 
     wasComplete.current = isComplete
-  }, [backendState?.hasCompleteVoteSet, backendState?.clock.remaining])
+
+    return () => {
+      clearTimeout(revealTimer.current ?? undefined)
+      clearTimeout(resetTimer.current ?? undefined)
+    }
+  }, [
+    backendState?.hasCompleteVoteSet,
+    backendState?.clock.remaining,
+    backendState?.clock.mode,
+    backendState?.clock.state,
+    backendState?.attemptChangeActive,
+    platformId,
+  ])
 
   // Smooth local tick — runs only while backend says clock is RUNNING
   useEffect(() => {
