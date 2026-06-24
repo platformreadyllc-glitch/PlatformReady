@@ -15,7 +15,7 @@ export interface BackendPlatformState {
 
 interface UsePlatformSocketResult {
   state: BackendPlatformState | null
-  connected: boolean
+  connected: boolean | null
 }
 
 export function usePlatformSocket(
@@ -23,7 +23,7 @@ export function usePlatformSocket(
   platformName: string,
 ): UsePlatformSocketResult {
   const [state, setState] = useState<BackendPlatformState | null>(null)
-  const [connected, setConnected] = useState(false)
+  const [connected, setConnected] = useState<boolean | null>(null)
   const socketRef = useRef<Socket | null>(null)
 
   useEffect(() => {

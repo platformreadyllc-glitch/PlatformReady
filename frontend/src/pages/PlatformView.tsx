@@ -28,7 +28,7 @@ export default function PlatformView() {
 
       <KeyboardHintOverlay />
 
-      {!connected && (
+      {connected === false && (
         <div className="fixed top-3 left-1/2 -translate-x-1/2 bg-red-600 text-white text-xs font-semibold px-3 py-1 rounded-full">
           DISCONNECTED
         </div>

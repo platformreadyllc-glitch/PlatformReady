@@ -24,7 +24,7 @@ export interface PlatformState {
   votes: Record<Role, VoteButton | null>
   revealed: boolean
   clock: ClockSnapshot
-  connected: boolean
+  connected: boolean | null
   attemptChangeActive: boolean
   startBreakCountdown: (minutes: 10 | 20) => void
   toggleAttemptChange: () => void
