@@ -14,10 +14,8 @@ import { PlatformGateway } from './platform.gateway';
 @Injectable()
 export class PlatformService {
   private readonly manager = new PlatformManager();
-  private readonly breakTimers = new Map<
-    string,
-    ReturnType<typeof setTimeout>
-  >();
+  private readonly breakTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly voteResetTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private globalBreak: { startedAt: number; duration: number } | null = null;
 
   constructor(private readonly gateway: PlatformGateway) {}
@@ -112,6 +110,11 @@ export class PlatformService {
       platform.castVote(remoteId, button);
       const outcome = platform.tryDetermineOutcome();
       this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+      // Schedule a server-side auto-reset so votes are never permanently stuck if all
+      // frontend tabs for this platform happen to be backgrounded during the reveal.
+      if (platform.hasCompleteVoteSet()) {
+        this.scheduleVoteReset(platformId, platform.decisionDelay + 6);
+      }
       return { votes: platform.getRefereeVotes(), outcome: outcome ?? null };
     } catch (e) {
       throw new BadRequestException((e as Error).message);
@@ -130,6 +133,7 @@ export class PlatformService {
   }
 
   resetAttempt(platformId: string) {
+    this.cancelVoteReset(platformId);
     const platform = this.getPlatform(platformId);
     platform.resetVotes();
     if (platform.clock.mode !== ClockMode.BREAK) {
@@ -137,6 +141,30 @@ export class PlatformService {
     }
     this.gateway.emitPlatformUpdate(platformId, platform.serialize());
     return platform.serialize();
+  }
+
+  private scheduleVoteReset(platformId: string, delaySeconds: number) {
+    this.cancelVoteReset(platformId);
+    const timer = setTimeout(() => {
+      this.voteResetTimers.delete(platformId);
+      if (!this.manager.hasPlatform(platformId)) return;
+      const platform = this.manager.getPlatform(platformId);
+      if (!platform.hasCompleteVoteSet()) return;
+      platform.resetVotes();
+      if (platform.clock.mode !== ClockMode.BREAK) {
+        platform.clock.resetToActive();
+      }
+      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+    }, delaySeconds * 1000);
+    this.voteResetTimers.set(platformId, timer);
+  }
+
+  private cancelVoteReset(platformId: string) {
+    const timer = this.voteResetTimers.get(platformId);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      this.voteResetTimers.delete(platformId);
+    }
   }
 
   toggleAttemptChange(platformId: string) {
