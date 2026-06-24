@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { PlatformManager } from './models/platform-manager';
 import { Platform } from './models/platform';
-import { Button, Role, ClockMode } from './models/enums';
+import { Button, Role, ClockMode, ClockState } from './models/enums';
 import { CreatePlatformDto } from './dto/create-platform.dto';
 import { RegisterRemoteDto } from './dto/register-remote.dto';
 import { EnsurePlatformDto } from './dto/ensure-platform.dto';
@@ -16,6 +16,7 @@ export class PlatformService {
   private readonly manager = new PlatformManager();
   private readonly breakTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly voteResetTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly clockTickIntervals = new Map<string, ReturnType<typeof setInterval>>();
   private globalBreak: { startedAt: number; duration: number } | null = null;
 
   constructor(private readonly gateway: PlatformGateway) {}
@@ -58,6 +59,7 @@ export class PlatformService {
           platform.clock.configureBreak(remaining);
           platform.clock.start();
           this.scheduleBreakReset(dto.platformId, remaining);
+          this.startClockTick(dto.platformId);
         } else {
           this.globalBreak = null;
         }
@@ -126,6 +128,11 @@ export class PlatformService {
     try {
       platform.handleClockButton(remoteId);
       this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+      if (platform.clock.state() === ClockState.RUNNING) {
+        this.startClockTick(platformId);
+      } else {
+        this.cancelClockTick(platformId);
+      }
       return platform.clock.serialize();
     } catch (e) {
       throw new BadRequestException((e as Error).message);
@@ -134,6 +141,7 @@ export class PlatformService {
 
   resetAttempt(platformId: string) {
     this.cancelVoteReset(platformId);
+    this.cancelClockTick(platformId);
     const platform = this.getPlatform(platformId);
     platform.resetVotes();
     if (platform.clock.mode !== ClockMode.BREAK) {
@@ -153,6 +161,7 @@ export class PlatformService {
       platform.resetVotes();
       if (platform.clock.mode !== ClockMode.BREAK) {
         platform.clock.resetToActive();
+        this.cancelClockTick(platformId);
       }
       this.gateway.emitPlatformUpdate(platformId, platform.serialize());
     }, delaySeconds * 1000);
@@ -164,6 +173,32 @@ export class PlatformService {
     if (timer !== undefined) {
       clearTimeout(timer);
       this.voteResetTimers.delete(platformId);
+    }
+  }
+
+  // Emits platform:updated every second while a clock is running so all
+  // connected clients stay synchronised without local time estimation.
+  private startClockTick(platformId: string) {
+    this.cancelClockTick(platformId);
+    const id = setInterval(() => {
+      if (!this.manager.hasPlatform(platformId)) {
+        this.cancelClockTick(platformId);
+        return;
+      }
+      const platform = this.manager.getPlatform(platformId);
+      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+      if (platform.clock.state() !== ClockState.RUNNING) {
+        this.cancelClockTick(platformId);
+      }
+    }, 1000);
+    this.clockTickIntervals.set(platformId, id);
+  }
+
+  private cancelClockTick(platformId: string) {
+    const id = this.clockTickIntervals.get(platformId);
+    if (id !== undefined) {
+      clearInterval(id);
+      this.clockTickIntervals.delete(platformId);
     }
   }
 
@@ -192,6 +227,7 @@ export class PlatformService {
       platform.clock.start();
       this.gateway.emitPlatformUpdate(platformId, platform.serialize());
       this.scheduleBreakReset(platformId, durationSeconds);
+      this.startClockTick(platformId);
       return platform.serialize();
     } catch (e) {
       throw new BadRequestException((e as Error).message);
@@ -209,6 +245,7 @@ export class PlatformService {
       this.gateway.emitGlobalUpdate(all);
       for (const platform of this.manager.listPlatforms()) {
         this.scheduleBreakReset(platform.platformId, durationSeconds);
+        this.startClockTick(platform.platformId);
       }
       return all;
     } catch (e) {
@@ -226,6 +263,7 @@ export class PlatformService {
       const platform = this.manager.getPlatform(platformId);
       if (platform.clock.mode === ClockMode.BREAK) {
         platform.clock.resetToActive();
+        this.cancelClockTick(platformId);
         this.gateway.emitPlatformUpdate(platformId, platform.serialize());
       }
     }, durationSeconds * 1000);
