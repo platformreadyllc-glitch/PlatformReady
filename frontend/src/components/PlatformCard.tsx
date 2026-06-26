@@ -13,7 +13,6 @@ export function PlatformCard({ numericId }: { numericId: number }) {
   const [breakStep, setBreakStep] = useState<BreakStep>('select')
   const [acPanelOpen, setAcPanelOpen] = useState(false)
 
-  const anyPanelOpen = breakPanelOpen || acPanelOpen
   const {
     config,
     votes,
@@ -23,7 +22,7 @@ export function PlatformCard({ numericId }: { numericId: number }) {
     attemptChangeActive,
     startBreakCountdown,
     toggleAttemptChange,
-  } = usePlatformState(id, !anyPanelOpen)
+  } = usePlatformState(id, false)
 
   function openBreakPanel() {
     setSelectedMinutes(null)
