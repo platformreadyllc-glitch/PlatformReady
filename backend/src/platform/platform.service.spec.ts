@@ -74,7 +74,10 @@ describe('PlatformService.castVote', () => {
     svc.ensurePlatform({ platformId: 'p1' });
     svc.pressClockButton('p1', 'kb-chief');
     svc.castVote('p1', 'kb-left', 'white' as any);
-    expect(gw.emitPlatformUpdate).toHaveBeenCalledWith('p1', expect.objectContaining({ platformId: 'p1' }));
+    expect(gw.emitPlatformUpdate).toHaveBeenCalledWith(
+      'p1',
+      expect.objectContaining({ platformId: 'p1' }),
+    );
   });
 
   it('returns the current votes and null outcome when not all have voted', () => {
@@ -146,7 +149,10 @@ describe('PlatformService.scheduleBreakReset', () => {
     jest.advanceTimersByTime(1001);
 
     expect(svc.getPlatform('p1').clock.mode).toBe(ClockMode.ACTIVE);
-    expect(gw.emitPlatformUpdate).toHaveBeenCalledWith('p1', expect.objectContaining({ platformId: 'p1' }));
+    expect(gw.emitPlatformUpdate).toHaveBeenCalledWith(
+      'p1',
+      expect.objectContaining({ platformId: 'p1' }),
+    );
   });
 
   it('does not reset if the clock was already reset to ACTIVE before timer fires', () => {
@@ -265,7 +271,9 @@ describe('PlatformService clock tick', () => {
     jest.advanceTimersByTime(3000);
 
     expect(gw.emitPlatformUpdate).toHaveBeenCalledTimes(3);
-    expect(gw.emitPlatformUpdate.mock.calls.every((c) => c[0] === 'p1')).toBe(true);
+    expect(gw.emitPlatformUpdate.mock.calls.every((c) => c[0] === 'p1')).toBe(
+      true,
+    );
   });
 
   it('stops ticking after resetAttempt', () => {
@@ -289,7 +297,9 @@ describe('PlatformService clock tick', () => {
     gw.emitPlatformUpdate.mockClear();
     jest.advanceTimersByTime(65000);
 
-    const states = gw.emitPlatformUpdate.mock.calls.map((c) => c[1].clock.state);
+    const states = gw.emitPlatformUpdate.mock.calls.map(
+      (c) => c[1].clock.state,
+    );
     expect(states).toContain(ClockState.EXPIRED);
 
     const countAfterExpiry = gw.emitPlatformUpdate.mock.calls.length;

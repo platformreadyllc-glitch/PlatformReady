@@ -14,9 +14,18 @@ import { PlatformGateway } from './platform.gateway';
 @Injectable()
 export class PlatformService {
   private readonly manager = new PlatformManager();
-  private readonly breakTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private readonly voteResetTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private readonly clockTickIntervals = new Map<string, ReturnType<typeof setInterval>>();
+  private readonly breakTimers = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
+  private readonly voteResetTimers = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
+  private readonly clockTickIntervals = new Map<
+    string,
+    ReturnType<typeof setInterval>
+  >();
   private globalBreak: { startedAt: number; duration: number } | null = null;
 
   constructor(private readonly gateway: PlatformGateway) {}
