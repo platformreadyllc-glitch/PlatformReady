@@ -24,7 +24,7 @@ export interface PlatformState {
   votes: Record<Role, VoteButton | null>
   revealed: boolean
   clock: ClockSnapshot
-  connected: boolean
+  connected: boolean | null
   attemptChangeActive: boolean
   startBreakCountdown: (minutes: 10 | 20) => void
   toggleAttemptChange: () => void
@@ -69,52 +69,60 @@ export function usePlatformState(id: string | undefined, inputEnabled = true): P
   const [localRemaining, setLocalRemaining] = useState<number | null>(null)
 
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const resetTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wasComplete = useRef(false)
   const clockModeRef = useRef<string>('ACTIVE')
   const clockStateRef = useRef<string>('IDLE')
   const attemptChangeRef = useRef<boolean>(false)
 
-  // Resync clock and handle vote-reveal transitions when backend state changes
+  // Sync refs and handle vote-reveal transitions when meaningful backend state changes.
+  // Deliberately excludes clock.remaining from deps so routine backend updates (vote
+  // events, etc.) do not cancel the reveal timer between the 3rd vote and the 1-second
+  // reveal delay. The clock tick effect below owns localRemaining updates.
   useEffect(() => {
     if (!backendState) return
 
-    // Keep refs in sync so the keyboard handler can read them without stale closure
     clockModeRef.current = backendState.clock.mode
     clockStateRef.current = backendState.clock.state
     attemptChangeRef.current = backendState.attemptChangeActive
 
-    // Resync the local countdown from the authoritative backend value
-    setLocalRemaining(backendState.clock.remaining)
-
     const isComplete = backendState.hasCompleteVoteSet
 
     if (isComplete && !wasComplete.current) {
-      // All three referees just voted → schedule reveal then auto-reset
-      revealTimer.current = setTimeout(() => {
-        setRevealed(true)
-        resetTimer.current = setTimeout(() => {
-          platformAction(`/platforms/${platformId}/reset`)
-        }, 5000)
-      }, 1000)
+      // All three referees just voted → reveal after 1 s; backend auto-resets at 7 s
+      revealTimer.current = setTimeout(() => setRevealed(true), 1000)
     } else if (!isComplete && wasComplete.current) {
-      // Votes were cleared → cancel pending timers and hide reveal
+      // Votes were cleared (manual reset or backend auto-reset)
       clearTimeout(revealTimer.current ?? undefined)
-      clearTimeout(resetTimer.current ?? undefined)
       setRevealed(false)
     }
 
     wasComplete.current = isComplete
-  }, [backendState?.hasCompleteVoteSet, backendState?.clock.remaining])
 
-  // Smooth local tick — runs only while backend says clock is RUNNING
+    return () => { clearTimeout(revealTimer.current ?? undefined) }
+  }, [
+    backendState?.hasCompleteVoteSet,
+    backendState?.clock.mode,
+    backendState?.clock.state,
+    backendState?.attemptChangeActive,
+    platformId,
+  ])
+
+  // Smooth local tick — anchored to wall-clock time so the display stays accurate
+  // even when the tab is in the background (browsers throttle setInterval there).
+  // Re-anchors on every backend update so it self-corrects after tab focus is restored.
   useEffect(() => {
-    if (backendState?.clock.state !== 'RUNNING') return
-    const interval = setInterval(() => {
-      setLocalRemaining((prev) => prev === null ? null : Math.max(0, prev - 0.1))
+    if (backendState?.clock.state !== 'RUNNING') {
+      setLocalRemaining(null)
+      return
+    }
+    const anchorMs = Date.now()
+    const anchorRemaining = backendState.clock.remaining
+    const id = setInterval(() => {
+      const elapsedSec = (Date.now() - anchorMs) / 1000
+      setLocalRemaining(Math.max(0, anchorRemaining - elapsedSec))
     }, 100)
-    return () => clearInterval(interval)
-  }, [backendState?.clock.state])
+    return () => clearInterval(id)
+  }, [backendState?.clock.state, backendState?.clock.remaining])
 
   // Keyboard handler — actions go to the backend API
   useEffect(() => {

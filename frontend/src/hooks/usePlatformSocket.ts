@@ -1,21 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
+import type { ClockSnapshot } from '@/lib/platformTypes'
 
 const API = 'http://localhost:3000'
-
-export interface BackendClock {
-  mode: 'ACTIVE' | 'BREAK'
-  state: 'IDLE' | 'RUNNING' | 'EXPIRED'
-  remaining: number
-  duration: number
-  openingAttemptsOpen: boolean
-  openingAttemptsRemaining: number | null
-}
 
 export interface BackendPlatformState {
   platformId: string
   name: string | null
-  clock: BackendClock
+  clock: ClockSnapshot
   votes: Record<string, string | null>
   hasCompleteVoteSet: boolean
   attemptChangeActive: boolean
@@ -23,7 +15,7 @@ export interface BackendPlatformState {
 
 interface UsePlatformSocketResult {
   state: BackendPlatformState | null
-  connected: boolean
+  connected: boolean | null
 }
 
 export function usePlatformSocket(
@@ -31,18 +23,28 @@ export function usePlatformSocket(
   platformName: string,
 ): UsePlatformSocketResult {
   const [state, setState] = useState<BackendPlatformState | null>(null)
-  const [connected, setConnected] = useState(false)
+  const [connected, setConnected] = useState<boolean | null>(null)
   const socketRef = useRef<Socket | null>(null)
 
   useEffect(() => {
+    // Once a real-time WS event arrives we no longer want the HTTP snapshot to
+    // overwrite it — the WS payload is always at least as fresh as the ensure
+    // response because the socket joined the room before the fetch resolved.
+    let wsUpdated = false
+
     // Ensure the platform exists on the backend (creates it with virtual remotes if needed)
     fetch(`${API}/platforms/ensure`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ platformId, name: platformName }),
     })
-      .then((r) => r.json())
-      .then((data: BackendPlatformState) => setState(data))
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
+      .then((data: BackendPlatformState) => {
+        if (!wsUpdated) setState(data)
+      })
       .catch(console.error)
 
     const socket = io(API)
@@ -54,6 +56,7 @@ export function usePlatformSocket(
     })
 
     socket.on('platform:updated', (data: BackendPlatformState) => {
+      wsUpdated = true
       setState(data)
     })
 

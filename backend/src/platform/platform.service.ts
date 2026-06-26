@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { PlatformManager } from './models/platform-manager';
 import { Platform } from './models/platform';
-import { Button, Role, ClockMode } from './models/enums';
+import { Button, Role, ClockMode, ClockState } from './models/enums';
 import { CreatePlatformDto } from './dto/create-platform.dto';
 import { RegisterRemoteDto } from './dto/register-remote.dto';
 import { EnsurePlatformDto } from './dto/ensure-platform.dto';
@@ -18,6 +18,15 @@ export class PlatformService {
     string,
     ReturnType<typeof setTimeout>
   >();
+  private readonly voteResetTimers = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
+  private readonly clockTickIntervals = new Map<
+    string,
+    ReturnType<typeof setInterval>
+  >();
+  private globalBreak: { startedAt: number; duration: number } | null = null;
 
   constructor(private readonly gateway: PlatformGateway) {}
 
@@ -48,6 +57,23 @@ export class PlatformService {
       platform.registerRemote('kb-left', 'left' as Role);
       platform.registerRemote('kb-chief', 'chief' as Role);
       platform.registerRemote('kb-right', 'right' as Role);
+
+      // If a global break is in progress, sync this platform into it so it
+      // can't accept votes while all other platforms are locked.
+      // Per-platform breaks are intentionally NOT inherited here.
+      if (this.globalBreak) {
+        const elapsed = performance.now() / 1000 - this.globalBreak.startedAt;
+        const remaining = Math.max(0, this.globalBreak.duration - elapsed);
+        if (remaining > 0) {
+          platform.clock.configureBreak(remaining);
+          platform.clock.start();
+          this.scheduleBreakReset(dto.platformId, remaining);
+          this.startClockTick(dto.platformId);
+        } else {
+          this.globalBreak = null;
+        }
+      }
+
       return platform.serialize();
     } catch (e) {
       throw new BadRequestException((e as Error).message);
@@ -93,9 +119,12 @@ export class PlatformService {
     const platform = this.getPlatform(platformId);
     try {
       platform.castVote(remoteId, button);
-      const outcome = platform.tryDetermineOutcome();
       this.gateway.emitPlatformUpdate(platformId, platform.serialize());
-      return { votes: platform.getRefereeVotes(), outcome: outcome ?? null };
+      // Fallback: auto-reset if all frontend tabs are backgrounded during the reveal window.
+      if (platform.hasCompleteVoteSet()) {
+        this.scheduleVoteReset(platformId, platform.decisionDelay + 6);
+      }
+      return { votes: platform.getRefereeVotes(), outcome: null };
     } catch (e) {
       throw new BadRequestException((e as Error).message);
     }
@@ -106,6 +135,11 @@ export class PlatformService {
     try {
       platform.handleClockButton(remoteId);
       this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+      if (platform.clock.state() === ClockState.RUNNING) {
+        this.startClockTick(platformId);
+      } else {
+        this.cancelClockTick(platformId);
+      }
       return platform.clock.serialize();
     } catch (e) {
       throw new BadRequestException((e as Error).message);
@@ -113,6 +147,8 @@ export class PlatformService {
   }
 
   resetAttempt(platformId: string) {
+    this.cancelVoteReset(platformId);
+    this.cancelClockTick(platformId);
     const platform = this.getPlatform(platformId);
     platform.resetVotes();
     if (platform.clock.mode !== ClockMode.BREAK) {
@@ -120,6 +156,57 @@ export class PlatformService {
     }
     this.gateway.emitPlatformUpdate(platformId, platform.serialize());
     return platform.serialize();
+  }
+
+  private scheduleVoteReset(platformId: string, delaySeconds: number) {
+    this.cancelVoteReset(platformId);
+    const timer = setTimeout(() => {
+      this.voteResetTimers.delete(platformId);
+      if (!this.manager.hasPlatform(platformId)) return;
+      const platform = this.manager.getPlatform(platformId);
+      if (!platform.hasCompleteVoteSet()) return;
+      platform.resetVotes();
+      if (platform.clock.mode !== ClockMode.BREAK) {
+        platform.clock.resetToActive();
+        this.cancelClockTick(platformId);
+      }
+      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+    }, delaySeconds * 1000);
+    this.voteResetTimers.set(platformId, timer);
+  }
+
+  private cancelVoteReset(platformId: string) {
+    const timer = this.voteResetTimers.get(platformId);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      this.voteResetTimers.delete(platformId);
+    }
+  }
+
+  // Emits platform:updated every second while a clock is running so all
+  // connected clients stay synchronised without local time estimation.
+  private startClockTick(platformId: string) {
+    this.cancelClockTick(platformId);
+    const id = setInterval(() => {
+      if (!this.manager.hasPlatform(platformId)) {
+        this.cancelClockTick(platformId);
+        return;
+      }
+      const platform = this.manager.getPlatform(platformId);
+      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+      if (platform.clock.state() !== ClockState.RUNNING) {
+        this.cancelClockTick(platformId);
+      }
+    }, 1000);
+    this.clockTickIntervals.set(platformId, id);
+  }
+
+  private cancelClockTick(platformId: string) {
+    const id = this.clockTickIntervals.get(platformId);
+    if (id !== undefined) {
+      clearInterval(id);
+      this.clockTickIntervals.delete(platformId);
+    }
   }
 
   toggleAttemptChange(platformId: string) {
@@ -147,6 +234,7 @@ export class PlatformService {
       platform.clock.start();
       this.gateway.emitPlatformUpdate(platformId, platform.serialize());
       this.scheduleBreakReset(platformId, durationSeconds);
+      this.startClockTick(platformId);
       return platform.serialize();
     } catch (e) {
       throw new BadRequestException((e as Error).message);
@@ -155,11 +243,16 @@ export class PlatformService {
 
   startGlobalBreak(durationSeconds: number) {
     try {
+      this.globalBreak = {
+        startedAt: performance.now() / 1000,
+        duration: durationSeconds,
+      };
       this.manager.startGlobalBreak(durationSeconds);
       const all = this.manager.serializeAll();
       this.gateway.emitGlobalUpdate(all);
       for (const platform of this.manager.listPlatforms()) {
         this.scheduleBreakReset(platform.platformId, durationSeconds);
+        this.startClockTick(platform.platformId);
       }
       return all;
     } catch (e) {
@@ -177,6 +270,7 @@ export class PlatformService {
       const platform = this.manager.getPlatform(platformId);
       if (platform.clock.mode === ClockMode.BREAK) {
         platform.clock.resetToActive();
+        this.cancelClockTick(platformId);
         this.gateway.emitPlatformUpdate(platformId, platform.serialize());
       }
     }, durationSeconds * 1000);
