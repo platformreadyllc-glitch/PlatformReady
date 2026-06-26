@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import { Monitor, Moon, Sun } from 'lucide-react'
 import { BrowserRouter, NavLink, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { useTheme, THEMES, type Theme } from '@/hooks/useTheme'
@@ -6,6 +5,7 @@ import { STORAGE_KEY, type StoredMeetConfig } from '@/lib/platformTypes'
 import MeetSetup from '@/pages/MeetSetup'
 import PlatformView from '@/pages/PlatformView'
 import ScoreTableView from '@/pages/ScoreTableView'
+import DirectorView from '@/pages/DirectorView'
 
 const THEME_META: Record<Theme, { icon: React.ReactNode; label: string }> = {
   midnight: { icon: <Moon size={16} />, label: 'Midnight' },
@@ -41,11 +41,10 @@ function readActivePlatforms(): Array<{ name: string }> {
 
 function Layout() {
   const { theme, cycleTheme } = useTheme()
-  const location = useLocation()
-
-  // Re-read platforms whenever navigation occurs so the nav stays in sync
-  // after the user saves a new config on MeetSetup.
-  const activePlatforms = useMemo(readActivePlatforms, [location])
+  // Re-read platforms on every navigation so the nav stays in sync after
+  // the user saves a new config on MeetSetup.
+  useLocation()
+  const activePlatforms = readActivePlatforms()
 
   return (
     <div className="flex h-screen bg-background">
@@ -76,7 +75,7 @@ function Layout() {
         )}
 
         <NavLink to="/controls" className={navLinkClass}>
-          Controls
+          Meet Director View
         </NavLink>
         <button
           onClick={cycleTheme}
@@ -94,21 +93,13 @@ function Layout() {
   )
 }
 
-function Placeholder({ name }: { name: string }) {
-  return (
-    <div className="text-secondary text-sm">
-      {name} — coming soon
-    </div>
-  )
-}
-
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<MeetSetup />} />
-          <Route path="/controls" element={<Placeholder name="Controls" />} />
+          <Route path="/controls" element={<DirectorView />} />
         </Route>
         {/* Platform pages render without the sidebar — full-screen display for TVs */}
         <Route path="/platform/:id" element={<PlatformView />} />
