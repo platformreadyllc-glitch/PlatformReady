@@ -65,7 +65,7 @@ export default function DirectorView() {
       {/* ── Global Break ─────────────────────────────────────────────────── */}
       <Card>
         <CardHeader
-          className="cursor-pointer select-none"
+          className="cursor-pointer select-none p-4"
           onClick={() => setCollapsed((c) => !c)}
         >
           <div className="flex items-center justify-between">
@@ -83,7 +83,7 @@ export default function DirectorView() {
         </CardHeader>
 
         {!collapsed && (
-          <CardContent className="flex flex-col gap-4">
+          <CardContent className="flex flex-col gap-3 px-4 pb-4 pt-0">
             {/* Running indicator */}
             {globalBreakActive && (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent/10 border border-accent/30">
@@ -92,8 +92,8 @@ export default function DirectorView() {
               </div>
             )}
 
-            {/* Target time input */}
-            <div className="flex items-center gap-4">
+            {/* Time input + preview + start button in one row */}
+            <div className="flex items-center gap-3 flex-wrap">
               <div className="flex items-center gap-2">
                 <span className="text-sm text-secondary">Start at</span>
                 <input
@@ -110,20 +110,18 @@ export default function DirectorView() {
                     : 'Time has already passed'}
                 </span>
               )}
+              <button
+                onClick={startGlobalBreak}
+                disabled={duration === null}
+                className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                  duration !== null
+                    ? 'bg-accent text-accent-text hover:bg-accent-hover'
+                    : 'bg-surface border border-border text-secondary cursor-not-allowed'
+                }`}
+              >
+                {buttonLabel}
+              </button>
             </div>
-
-            {/* Start button */}
-            <button
-              onClick={startGlobalBreak}
-              disabled={duration === null}
-              className={`self-start px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                duration !== null
-                  ? 'bg-accent text-accent-text hover:bg-accent-hover'
-                  : 'bg-surface border border-border text-secondary cursor-not-allowed'
-              }`}
-            >
-              {buttonLabel}
-            </button>
           </CardContent>
         )}
       </Card>
