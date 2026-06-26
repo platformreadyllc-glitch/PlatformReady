@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PlatformCard } from '@/components/PlatformCard'
 import { platformAction } from '@/hooks/usePlatformSocket'
 import { formatTime } from '@/lib/platformHelpers'
 import { STORAGE_KEY, type StoredMeetConfig } from '@/lib/platformTypes'
-
-type GlobalBreakMode = 'duration' | 'targetTime'
 
 function readActivePlatformCount(): number {
   try {
@@ -29,17 +28,8 @@ function durationUntil(timeStr: string, now: number): number {
 export default function DirectorView() {
   const platformCount = readActivePlatformCount()
 
-  // ── Global break state ────────────────────────────────────────────────────
-  const [breakMode, setBreakMode] = useState<GlobalBreakMode>('duration')
-
-  // Duration mode
-  const [durationMins, setDurationMins] = useState('')
-  const [durationSecs, setDurationSecs] = useState('')
-
-  // Target time mode
+  const [collapsed, setCollapsed] = useState(false)
   const [targetTime, setTargetTime] = useState('')
-
-  // Tracks when the most recently started global break will end
   const [breakEndsAt, setBreakEndsAt] = useState<number | null>(null)
 
   // Wall-clock timestamp updated every second — used for target preview and break indicator
@@ -52,36 +42,20 @@ export default function DirectorView() {
 
   const globalBreakActive = breakEndsAt !== null && now < breakEndsAt
 
-  // Computed inline on every render so no stale state
-  const targetPreview =
-    breakMode === 'targetTime' && targetTime ? durationUntil(targetTime, now) : null
+  const targetPreview = targetTime ? durationUntil(targetTime, now) : null
+  const duration = targetPreview !== null && targetPreview > 0 ? targetPreview : null
 
-  function computedDuration(): number | null {
-    if (breakMode === 'duration') {
-      const mins = parseInt(durationMins || '0', 10)
-      const secs = parseInt(durationSecs || '0', 10)
-      const total = mins * 60 + secs
-      return total > 0 ? total : null
-    }
-    if (breakMode === 'targetTime' && targetTime) {
-      const secs = durationUntil(targetTime, now)
-      return secs > 0 ? secs : null
-    }
-    return null
-  }
-
-  const duration = computedDuration()
   const buttonLabel =
     duration !== null
       ? `Start Global Break — ${formatTime(duration)}`
-      : breakMode === 'targetTime' && targetTime && (targetPreview ?? 0) <= 0
+      : targetTime && targetPreview !== null && targetPreview <= 0
         ? 'Time has already passed'
         : 'Start Global Break'
 
   function startGlobalBreak() {
     if (duration === null) return
     platformAction('/platforms/break', { durationSeconds: duration })
-    setBreakEndsAt(Date.now() + duration * 1000)
+    setBreakEndsAt(now + duration * 1000)
   }
 
   return (
@@ -90,66 +64,35 @@ export default function DirectorView() {
 
       {/* ── Global Break ─────────────────────────────────────────────────── */}
       <Card>
-        <CardHeader>
-          <CardTitle>Global Break</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {/* Running indicator */}
-          {globalBreakActive && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent/10 border border-accent/30">
-              <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
-              <span className="text-sm font-medium text-accent">Global break in progress</span>
-            </div>
-          )}
-
-          {/* Mode toggle */}
-          <div className="flex gap-2">
-            {(['duration', 'targetTime'] as const).map((m) => (
-              <button
-                key={m}
-                onClick={() => setBreakMode(m)}
-                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  breakMode === m
-                    ? 'bg-accent text-accent-text'
-                    : 'bg-background border border-border text-secondary hover:text-primary hover:border-accent'
-                }`}
-              >
-                {m === 'duration' ? 'Duration' : 'Target Time'}
-              </button>
-            ))}
-          </div>
-
-          {/* Duration inputs */}
-          {breakMode === 'duration' && (
+        <CardHeader
+          className="cursor-pointer select-none"
+          onClick={() => setCollapsed((c) => !c)}
+        >
+          <div className="flex items-center justify-between">
+            <CardTitle>Global Break</CardTitle>
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min={0}
-                  placeholder="0"
-                  value={durationMins}
-                  onChange={(e) => setDurationMins(e.target.value)}
-                  className="w-20 rounded-md border border-border bg-background px-3 py-1.5 text-sm text-primary text-right focus:outline-none focus:ring-2 focus:ring-accent"
-                />
-                <span className="text-sm text-secondary">min</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min={0}
-                  max={59}
-                  placeholder="0"
-                  value={durationSecs}
-                  onChange={(e) => setDurationSecs(e.target.value)}
-                  className="w-20 rounded-md border border-border bg-background px-3 py-1.5 text-sm text-primary text-right focus:outline-none focus:ring-2 focus:ring-accent"
-                />
-                <span className="text-sm text-secondary">sec</span>
-              </div>
+              {globalBreakActive && (
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+                  <span className="text-xs font-medium text-accent">In progress</span>
+                </div>
+              )}
+              {collapsed ? <ChevronDown size={16} className="text-secondary" /> : <ChevronUp size={16} className="text-secondary" />}
             </div>
-          )}
+          </div>
+        </CardHeader>
 
-          {/* Target time input */}
-          {breakMode === 'targetTime' && (
+        {!collapsed && (
+          <CardContent className="flex flex-col gap-4">
+            {/* Running indicator */}
+            {globalBreakActive && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent/10 border border-accent/30">
+                <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+                <span className="text-sm font-medium text-accent">Global break in progress</span>
+              </div>
+            )}
+
+            {/* Target time input */}
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <span className="text-sm text-secondary">Start at</span>
@@ -168,21 +111,21 @@ export default function DirectorView() {
                 </span>
               )}
             </div>
-          )}
 
-          {/* Start button */}
-          <button
-            onClick={startGlobalBreak}
-            disabled={duration === null}
-            className={`self-start px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${
-              duration !== null
-                ? 'bg-accent text-accent-text hover:bg-accent-hover'
-                : 'bg-surface border border-border text-secondary cursor-not-allowed'
-            }`}
-          >
-            {buttonLabel}
-          </button>
-        </CardContent>
+            {/* Start button */}
+            <button
+              onClick={startGlobalBreak}
+              disabled={duration === null}
+              className={`self-start px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                duration !== null
+                  ? 'bg-accent text-accent-text hover:bg-accent-hover'
+                  : 'bg-surface border border-border text-secondary cursor-not-allowed'
+              }`}
+            >
+              {buttonLabel}
+            </button>
+          </CardContent>
+        )}
       </Card>
 
       {/* ── Platform grid ────────────────────────────────────────────────── */}
