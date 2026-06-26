@@ -110,14 +110,12 @@ export class PlatformService {
     const platform = this.getPlatform(platformId);
     try {
       platform.castVote(remoteId, button);
-      const outcome = platform.tryDetermineOutcome();
       this.gateway.emitPlatformUpdate(platformId, platform.serialize());
-      // Schedule a server-side auto-reset so votes are never permanently stuck if all
-      // frontend tabs for this platform happen to be backgrounded during the reveal.
+      // Fallback: auto-reset if all frontend tabs are backgrounded during the reveal window.
       if (platform.hasCompleteVoteSet()) {
         this.scheduleVoteReset(platformId, platform.decisionDelay + 6);
       }
-      return { votes: platform.getRefereeVotes(), outcome: outcome ?? null };
+      return { votes: platform.getRefereeVotes(), outcome: null };
     } catch (e) {
       throw new BadRequestException((e as Error).message);
     }

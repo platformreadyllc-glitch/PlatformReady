@@ -156,10 +156,17 @@ describe('PlatformService.scheduleBreakReset', () => {
     svc.startPlatformBreak('p1', 1);
     svc.getPlatform('p1').clock.resetToActive();
 
-    gw.emitPlatformUpdate.mockClear();
+    gw.emitPlatformUpdate.mockClear(); // clear the emit from startPlatformBreak itself
+
     jest.advanceTimersByTime(1001);
 
-    expect(gw.emitPlatformUpdate).not.toHaveBeenCalled();
+    // Break reset timer saw mode !== BREAK and skipped — clock stays ACTIVE
+    expect(svc.getPlatform('p1').clock.mode).toBe(ClockMode.ACTIVE);
+    // No timer-driven emit contained a BREAK-mode clock
+    const breakEmits = gw.emitPlatformUpdate.mock.calls.filter(
+      (c) => c[1].clock.mode === ClockMode.BREAK,
+    );
+    expect(breakEmits).toHaveLength(0);
   });
 
   it('does not throw if the platform was deleted before the timer fires', () => {
@@ -186,5 +193,123 @@ describe('PlatformService.scheduleBreakReset', () => {
 
     jest.advanceTimersByTime(10000);
     expect(gw.emitPlatformUpdate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('PlatformService.scheduleVoteReset', () => {
+  function castAllVotes(svc: PlatformService, platformId: string) {
+    svc.pressClockButton(platformId, 'kb-chief');
+    svc.castVote(platformId, 'kb-left', 'white' as any);
+    svc.castVote(platformId, 'kb-chief', 'white' as any);
+    svc.castVote(platformId, 'kb-right', 'white' as any);
+  }
+
+  it('auto-resets votes and clock after decisionDelay + 6 s', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw);
+    svc.ensurePlatform({ platformId: 'p1' });
+    castAllVotes(svc, 'p1');
+    expect(svc.getPlatform('p1').hasCompleteVoteSet()).toBe(true);
+
+    jest.advanceTimersByTime(8000);
+
+    expect(svc.getPlatform('p1').hasCompleteVoteSet()).toBe(false);
+    expect(svc.getPlatform('p1').clock.state()).toBe(ClockState.IDLE);
+    const lastEmit = gw.emitPlatformUpdate.mock.calls.at(-1)![1];
+    expect(lastEmit.hasCompleteVoteSet).toBe(false);
+  });
+
+  it('manual resetAttempt cancels the auto-reset', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw);
+    svc.ensurePlatform({ platformId: 'p1' });
+    castAllVotes(svc, 'p1');
+    svc.resetAttempt('p1');
+
+    gw.emitPlatformUpdate.mockClear();
+    jest.advanceTimersByTime(8000);
+    expect(gw.emitPlatformUpdate).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op if votes were cleared manually before the timer fires', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw);
+    svc.ensurePlatform({ platformId: 'p1' });
+    castAllVotes(svc, 'p1');
+    svc.getPlatform('p1').resetVotes();
+
+    jest.advanceTimersByTime(8000);
+
+    // Timer saw !hasCompleteVoteSet and returned early — clock was NOT reset
+    expect(svc.getPlatform('p1').clock.state()).toBe(ClockState.RUNNING);
+  });
+
+  it('does not throw if the platform was deleted before the timer fires', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw);
+    svc.ensurePlatform({ platformId: 'p1' });
+    castAllVotes(svc, 'p1');
+    svc.deletePlatform('p1');
+    expect(() => jest.advanceTimersByTime(8000)).not.toThrow();
+  });
+});
+
+describe('PlatformService clock tick', () => {
+  it('emits platform:updated every second while an active clock runs', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw);
+    svc.ensurePlatform({ platformId: 'p1' });
+    svc.pressClockButton('p1', 'kb-chief');
+
+    gw.emitPlatformUpdate.mockClear();
+    jest.advanceTimersByTime(3000);
+
+    expect(gw.emitPlatformUpdate).toHaveBeenCalledTimes(3);
+    expect(gw.emitPlatformUpdate.mock.calls.every((c) => c[0] === 'p1')).toBe(true);
+  });
+
+  it('stops ticking after resetAttempt', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw);
+    svc.ensurePlatform({ platformId: 'p1' });
+    svc.pressClockButton('p1', 'kb-chief');
+    svc.resetAttempt('p1');
+
+    gw.emitPlatformUpdate.mockClear();
+    jest.advanceTimersByTime(3000);
+    expect(gw.emitPlatformUpdate).not.toHaveBeenCalled();
+  });
+
+  it('emits EXPIRED state when the clock runs out and then stops ticking', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw);
+    svc.ensurePlatform({ platformId: 'p1' });
+    svc.pressClockButton('p1', 'kb-chief');
+
+    gw.emitPlatformUpdate.mockClear();
+    jest.advanceTimersByTime(65000);
+
+    const states = gw.emitPlatformUpdate.mock.calls.map((c) => c[1].clock.state);
+    expect(states).toContain(ClockState.EXPIRED);
+
+    const countAfterExpiry = gw.emitPlatformUpdate.mock.calls.length;
+    jest.advanceTimersByTime(5000);
+    expect(gw.emitPlatformUpdate.mock.calls.length).toBe(countAfterExpiry);
+  });
+
+  it('ticks during a platform break and stops once the break ends', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw);
+    svc.ensurePlatform({ platformId: 'p1' });
+    svc.startPlatformBreak('p1', 5);
+
+    gw.emitPlatformUpdate.mockClear();
+    jest.advanceTimersByTime(4000);
+    expect(gw.emitPlatformUpdate).toHaveBeenCalledTimes(4);
+
+    jest.advanceTimersByTime(2000); // advance past the 5-second break end
+    gw.emitPlatformUpdate.mockClear();
+    jest.advanceTimersByTime(3000);
+    expect(gw.emitPlatformUpdate).not.toHaveBeenCalled();
   });
 });
