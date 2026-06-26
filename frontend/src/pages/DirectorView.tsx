@@ -28,7 +28,7 @@ function durationUntil(timeStr: string, now: number): number {
 export default function DirectorView() {
   const platformCount = readActivePlatformCount()
 
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(true)
   const [targetTime, setTargetTime] = useState('')
   const [breakEndsAt, setBreakEndsAt] = useState<number | null>(null)
 
