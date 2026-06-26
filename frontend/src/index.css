@@ -120,3 +120,15 @@ body {
   background-color: var(--background);
   color: var(--text-primary);
 }
+
+/* Suppress Chrome/Safari autofill background highlight.
+   The browser ignores background-color on autofilled inputs, so we paint
+   over it with a large inset box-shadow using our own surface colour. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px var(--background) inset !important;
+  -webkit-text-fill-color: var(--text-primary) !important;
+  caret-color: var(--text-primary);
+}
