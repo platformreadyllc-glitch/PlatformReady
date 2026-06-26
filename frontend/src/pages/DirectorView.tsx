@@ -95,7 +95,7 @@ export default function DirectorView() {
             {/* Time input + preview + start button in one row */}
             <div className="flex items-center gap-3 flex-wrap">
               <div className="flex items-center gap-2">
-                <span className="text-sm text-secondary">Start at</span>
+                <span className="text-sm text-secondary">Start Flight A at:</span>
                 <input
                   type="time"
                   value={targetTime}
@@ -113,11 +113,10 @@ export default function DirectorView() {
               <button
                 onClick={startGlobalBreak}
                 disabled={duration === null}
-                className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
-                  duration !== null
+                className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-colors ${duration !== null
                     ? 'bg-accent text-accent-text hover:bg-accent-hover'
                     : 'bg-surface border border-border text-secondary cursor-not-allowed'
-                }`}
+                  }`}
               >
                 {buttonLabel}
               </button>
