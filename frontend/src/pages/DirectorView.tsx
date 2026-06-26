@@ -18,12 +18,12 @@ function readActivePlatformCount(): number {
   }
 }
 
-function durationUntil(timeStr: string): number {
+function durationUntil(timeStr: string, now: number): number {
   const [h, m] = timeStr.split(':').map(Number)
-  const target = new Date()
+  const target = new Date(now)
   target.setHours(h, m, 0, 0)
-  if (target.getTime() <= Date.now()) target.setDate(target.getDate() + 1)
-  return Math.round((target.getTime() - Date.now()) / 1000)
+  if (target.getTime() <= now) target.setDate(target.getDate() + 1)
+  return Math.round((target.getTime() - now) / 1000)
 }
 
 export default function DirectorView() {
@@ -39,17 +39,22 @@ export default function DirectorView() {
   // Target time mode
   const [targetTime, setTargetTime] = useState('')
 
-  // Tick counter forces a re-render every second so the preview stays current
-  const [, setTick] = useState(0)
+  // Tracks when the most recently started global break will end
+  const [breakEndsAt, setBreakEndsAt] = useState<number | null>(null)
+
+  // Wall-clock timestamp updated every second — used for target preview and break indicator
+  // (avoids calling Date.now() during render, satisfying react-hooks/purity)
+  const [now, setNow] = useState(Date.now)
   useEffect(() => {
-    if (breakMode !== 'targetTime' || !targetTime) return
-    const id = setInterval(() => setTick((t) => t + 1), 1000)
+    const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
-  }, [breakMode, targetTime])
+  }, [])
+
+  const globalBreakActive = breakEndsAt !== null && now < breakEndsAt
 
   // Computed inline on every render so no stale state
   const targetPreview =
-    breakMode === 'targetTime' && targetTime ? durationUntil(targetTime) : null
+    breakMode === 'targetTime' && targetTime ? durationUntil(targetTime, now) : null
 
   function computedDuration(): number | null {
     if (breakMode === 'duration') {
@@ -59,7 +64,7 @@ export default function DirectorView() {
       return total > 0 ? total : null
     }
     if (breakMode === 'targetTime' && targetTime) {
-      const secs = durationUntil(targetTime)
+      const secs = durationUntil(targetTime, now)
       return secs > 0 ? secs : null
     }
     return null
@@ -76,6 +81,7 @@ export default function DirectorView() {
   function startGlobalBreak() {
     if (duration === null) return
     platformAction('/platforms/break', { durationSeconds: duration })
+    setBreakEndsAt(Date.now() + duration * 1000)
   }
 
   return (
@@ -88,6 +94,14 @@ export default function DirectorView() {
           <CardTitle>Global Break</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          {/* Running indicator */}
+          {globalBreakActive && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent/10 border border-accent/30">
+              <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+              <span className="text-sm font-medium text-accent">Global break in progress</span>
+            </div>
+          )}
+
           {/* Mode toggle */}
           <div className="flex gap-2">
             {(['duration', 'targetTime'] as const).map((m) => (

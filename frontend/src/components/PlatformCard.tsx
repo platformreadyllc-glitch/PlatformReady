@@ -56,6 +56,11 @@ export function PlatformCard({ numericId }: { numericId: number }) {
 
   if (!config.configFound) return null
 
+  const inBreak = clock.mode === 'BREAK'
+  // Derive panel visibility — panels collapse immediately when a break starts
+  const showBreakPanel = breakPanelOpen && !inBreak
+  const showAcPanel = acPanelOpen && !inBreak
+
   const clockColor =
     clock.state === 'EXPIRED'
       ? 'text-red-500'
@@ -108,7 +113,7 @@ export function PlatformCard({ numericId }: { numericId: number }) {
       </div>
 
       {/* Break panel */}
-      {breakPanelOpen && (
+      {showBreakPanel && (
         <div className="mx-4 mb-3 bg-background border border-border rounded-lg px-4 py-3 flex flex-col gap-3">
           <span className="text-xs uppercase tracking-widest text-secondary">
             Select break duration
@@ -162,7 +167,7 @@ export function PlatformCard({ numericId }: { numericId: number }) {
       )}
 
       {/* Attempt change panel */}
-      {acPanelOpen && (
+      {showAcPanel && (
         <div className="mx-4 mb-3 bg-background border border-border rounded-lg px-4 py-3 flex flex-col gap-3">
           <span className="text-xs uppercase tracking-widest text-secondary text-center">
             Attempt Change Alert
@@ -189,20 +194,28 @@ export function PlatformCard({ numericId }: { numericId: number }) {
       {/* Control buttons */}
       <div className="flex gap-2 px-4 pb-4">
         <button
+          disabled={inBreak}
           onClick={breakPanelOpen ? closeBreakPanel : openBreakPanel}
-          className="flex-1 py-2 rounded-lg text-xs font-medium bg-background border border-border text-secondary hover:text-primary hover:border-accent transition-colors"
+          className={`flex-1 py-2 rounded-lg text-xs font-medium border transition-colors ${
+            inBreak
+              ? 'border-border text-secondary opacity-40 cursor-not-allowed'
+              : 'bg-background border-border text-secondary hover:text-primary hover:border-accent'
+          }`}
         >
           Break Clock
         </button>
         <button
+          disabled={inBreak}
           onClick={() => {
             setBreakPanelOpen(false)
             setAcPanelOpen((o) => !o)
           }}
           className={`flex-1 py-2 rounded-lg text-xs font-medium border transition-colors ${
-            attemptChangeActive
-              ? 'bg-amber-500 border-amber-500 text-white hover:bg-amber-600'
-              : 'bg-background border-border text-secondary hover:text-primary hover:border-amber-500'
+            inBreak
+              ? 'border-border text-secondary opacity-40 cursor-not-allowed'
+              : attemptChangeActive
+                ? 'bg-amber-500 border-amber-500 text-white hover:bg-amber-600'
+                : 'bg-background border-border text-secondary hover:text-primary hover:border-amber-500'
           }`}
         >
           Attempt Change

@@ -51,6 +51,11 @@ export default function ScoreTableView() {
     setAttemptChangePanelOpen(false)
   }
 
+  const inBreak = clock.mode === 'BREAK'
+  // Derive panel visibility — panels collapse immediately when a break starts
+  const showPanel = panelOpen && !inBreak
+  const showAcPanel = attemptChangePanelOpen && !inBreak
+
   if (!config.configFound) {
     return (
       <div className="platform-display min-h-screen bg-background flex items-center justify-center">
@@ -74,7 +79,7 @@ export default function ScoreTableView() {
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
 
         {/* Break countdown panel */}
-        {panelOpen && (
+        {showPanel && (
           <div className="bg-surface border border-border rounded-xl px-6 py-5 flex flex-col gap-4 min-w-[360px] shadow-lg">
             <div className="flex flex-col gap-2">
               <span className="text-xs uppercase tracking-widest text-secondary">Select break duration</span>
@@ -126,7 +131,7 @@ export default function ScoreTableView() {
         )}
 
         {/* Attempt change panel */}
-        {attemptChangePanelOpen && (
+        {showAcPanel && (
           <div className="bg-surface border border-border rounded-xl px-6 py-5 flex flex-col gap-4 min-w-[360px] shadow-lg">
             <span className="text-xs uppercase tracking-widest text-secondary text-center">Attempt Change Alert</span>
             <button
@@ -150,20 +155,29 @@ export default function ScoreTableView() {
         {/* Control buttons row */}
         <div className="flex gap-3">
           <button
+            disabled={inBreak}
             onClick={panelOpen ? closePanel : openPanel}
-            className="px-5 py-2 rounded-lg text-sm font-medium bg-surface border border-border text-secondary hover:text-primary hover:border-accent transition-colors"
+            className={`px-5 py-2 rounded-lg text-sm font-medium border transition-colors ${
+              inBreak
+                ? 'border-border text-secondary opacity-40 cursor-not-allowed'
+                : 'bg-surface border-border text-secondary hover:text-primary hover:border-accent'
+            }`}
           >
             Break Clock
           </button>
           <button
+            disabled={inBreak}
             onClick={() => {
               setPanelOpen(false)
               setAttemptChangePanelOpen((o) => !o)
             }}
-            className={`px-5 py-2 rounded-lg text-sm font-medium border transition-colors ${attemptChangeActive
-              ? 'bg-amber-500 border-amber-500 text-white hover:bg-amber-600'
-              : 'bg-surface border-border text-secondary hover:text-primary hover:border-amber-500'
-              }`}
+            className={`px-5 py-2 rounded-lg text-sm font-medium border transition-colors ${
+              inBreak
+                ? 'border-border text-secondary opacity-40 cursor-not-allowed'
+                : attemptChangeActive
+                  ? 'bg-amber-500 border-amber-500 text-white hover:bg-amber-600'
+                  : 'bg-surface border-border text-secondary hover:text-primary hover:border-amber-500'
+            }`}
           >
             DL3 Attempt Change
           </button>
