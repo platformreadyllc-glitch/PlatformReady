@@ -157,7 +157,7 @@ export default function ScoreTableView() {
         <div className="flex gap-3">
           {inBreak ? (
             <button
-              onClick={() => platformAction(`/platforms/${id}/break`, undefined, 'DELETE')}
+              onClick={() => platformAction(`/platforms/platform-${id}/break`, undefined, 'DELETE')}
               className="px-5 py-2 rounded-lg text-sm font-medium border border-red-500 text-red-500 hover:bg-red-500 hover:text-white transition-colors"
             >
               Cancel Break
