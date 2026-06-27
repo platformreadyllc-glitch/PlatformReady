@@ -260,6 +260,46 @@ export class PlatformService {
     }
   }
 
+  getGlobalBreak(): { endsAt: number } | null {
+    if (!this.globalBreak) return null;
+    const elapsed = performance.now() / 1000 - this.globalBreak.startedAt;
+    const remaining = Math.max(0, this.globalBreak.duration - elapsed);
+    if (remaining <= 0) {
+      this.globalBreak = null;
+      return null;
+    }
+    return { endsAt: Date.now() + remaining * 1000 };
+  }
+
+  cancelPlatformBreak(platformId: string) {
+    const platform = this.getPlatform(platformId);
+    if (platform.clock.mode !== ClockMode.BREAK) return platform.serialize();
+    if (this.breakTimers.has(platformId)) {
+      clearTimeout(this.breakTimers.get(platformId)!);
+      this.breakTimers.delete(platformId);
+    }
+    platform.clock.resetToActive();
+    this.cancelClockTick(platformId);
+    this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+    return platform.serialize();
+  }
+
+  cancelGlobalBreak() {
+    this.globalBreak = null;
+    for (const platform of this.manager.listPlatforms()) {
+      if (platform.clock.mode !== ClockMode.BREAK) continue;
+      if (this.breakTimers.has(platform.platformId)) {
+        clearTimeout(this.breakTimers.get(platform.platformId)!);
+        this.breakTimers.delete(platform.platformId);
+      }
+      platform.clock.resetToActive();
+      this.cancelClockTick(platform.platformId);
+    }
+    const all = this.manager.serializeAll();
+    this.gateway.emitGlobalUpdate(all);
+    return all;
+  }
+
   private scheduleBreakReset(platformId: string, durationSeconds: number) {
     if (this.breakTimers.has(platformId)) {
       clearTimeout(this.breakTimers.get(platformId)!);

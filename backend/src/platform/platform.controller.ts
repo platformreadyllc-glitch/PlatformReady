@@ -32,9 +32,21 @@ export class PlatformController {
     return this.platformService.createPlatform(dto).serialize();
   }
 
+  // Must be declared before @Get(':id') so 'break' isn't matched as an id
+  @Get('break')
+  getGlobalBreak() {
+    return this.platformService.getGlobalBreak();
+  }
+
   @Get(':id')
   getPlatform(@Param('id') id: string) {
     return this.platformService.getPlatform(id).serialize();
+  }
+
+  // Must be declared before @Delete(':id') so 'break' isn't matched as an id
+  @Delete('break')
+  cancelGlobalBreak() {
+    return this.platformService.cancelGlobalBreak();
   }
 
   @Delete(':id')
@@ -81,5 +93,10 @@ export class PlatformController {
     @Body() dto: StartGlobalBreakDto,
   ) {
     return this.platformService.startPlatformBreak(id, dto.durationSeconds);
+  }
+
+  @Delete(':id/break')
+  cancelPlatformBreak(@Param('id') id: string) {
+    return this.platformService.cancelPlatformBreak(id);
   }
 }

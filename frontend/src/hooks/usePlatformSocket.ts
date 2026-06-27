@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
 import type { ClockSnapshot } from '@/lib/platformTypes'
 
-const API = 'http://localhost:3000'
+export const API = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
 
 export interface BackendPlatformState {
   platformId: string
@@ -71,9 +71,9 @@ export function usePlatformSocket(
   return { state, connected }
 }
 
-export function platformAction(path: string, body?: object): void {
+export function platformAction(path: string, body?: object, method = 'POST'): void {
   fetch(`${API}${path}`, {
-    method: 'POST',
+    method,
     headers: { 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
   }).catch(console.error)
