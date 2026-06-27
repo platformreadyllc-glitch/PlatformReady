@@ -138,6 +138,41 @@ describe('PlatformService.startGlobalBreak', () => {
   });
 });
 
+describe('PlatformService.getGlobalBreak', () => {
+  it('returns null when no global break is active', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw);
+    expect(svc.getGlobalBreak()).toBeNull();
+  });
+
+  it('returns endsAt in the future when a break is running', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw);
+    svc.ensurePlatform({ platformId: 'p1' });
+    svc.startGlobalBreak(600);
+
+    const result = svc.getGlobalBreak();
+    expect(result).not.toBeNull();
+    expect(result!.endsAt).toBeGreaterThan(Date.now());
+  });
+
+  it('returns null and clears state once the break duration has elapsed', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw);
+    svc.ensurePlatform({ platformId: 'p1' });
+    svc.startGlobalBreak(1);
+
+    jest.advanceTimersByTime(2000);
+
+    const result = svc.getGlobalBreak();
+    expect(result).toBeNull();
+
+    // Cleared state: a new platform must not inherit the expired break
+    const p2 = svc.ensurePlatform({ platformId: 'p2' });
+    expect(p2.clock.mode).toBe(ClockMode.ACTIVE);
+  });
+});
+
 describe('PlatformService.cancelPlatformBreak', () => {
   it('resets a breaking platform to ACTIVE and emits update', () => {
     const gw = makeGateway();
