@@ -71,9 +71,9 @@ export function usePlatformSocket(
   return { state, connected }
 }
 
-export function platformAction(path: string, body?: object): void {
+export function platformAction(path: string, body?: object, method = 'POST'): void {
   fetch(`${API}${path}`, {
-    method: 'POST',
+    method,
     headers: { 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
   }).catch(console.error)

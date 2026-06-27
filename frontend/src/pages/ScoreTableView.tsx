@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { PlatformDisplay } from '@/components/PlatformDisplay'
 import { KeyboardHintOverlay } from '@/components/KeyboardHintOverlay'
 import { usePlatformState } from '@/hooks/usePlatformState'
+import { platformAction } from '@/hooks/usePlatformSocket'
 
 type ControlStep = 'select' | 'confirm' | 'start'
 
@@ -154,17 +155,21 @@ export default function ScoreTableView() {
 
         {/* Control buttons row */}
         <div className="flex gap-3">
-          <button
-            disabled={inBreak}
-            onClick={panelOpen ? closePanel : openPanel}
-            className={`px-5 py-2 rounded-lg text-sm font-medium border transition-colors ${
-              inBreak
-                ? 'border-border text-secondary opacity-40 cursor-not-allowed'
-                : 'bg-surface border-border text-secondary hover:text-primary hover:border-accent'
-            }`}
-          >
-            Break Clock
-          </button>
+          {inBreak ? (
+            <button
+              onClick={() => platformAction(`/platforms/${id}/break`, undefined, 'DELETE')}
+              className="px-5 py-2 rounded-lg text-sm font-medium border border-red-500 text-red-500 hover:bg-red-500 hover:text-white transition-colors"
+            >
+              Cancel Break
+            </button>
+          ) : (
+            <button
+              onClick={panelOpen ? closePanel : openPanel}
+              className="px-5 py-2 rounded-lg text-sm font-medium border bg-surface border-border text-secondary hover:text-primary hover:border-accent transition-colors"
+            >
+              Break Clock
+            </button>
+          )}
           <button
             disabled={inBreak}
             onClick={() => {

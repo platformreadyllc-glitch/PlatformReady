@@ -58,6 +58,11 @@ export default function DirectorView() {
     setBreakEndsAt(now + duration * 1000)
   }
 
+  function cancelGlobalBreak() {
+    platformAction('/platforms/break', undefined, 'DELETE')
+    setBreakEndsAt(null)
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold text-primary">Meet Director</h1>
@@ -110,16 +115,26 @@ export default function DirectorView() {
                     : 'Time has already passed'}
                 </span>
               )}
-              <button
-                onClick={startGlobalBreak}
-                disabled={duration === null}
-                className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-colors ${duration !== null
-                    ? 'bg-accent text-accent-text hover:bg-accent-hover'
-                    : 'bg-surface border border-border text-secondary cursor-not-allowed'
+              {globalBreakActive ? (
+                <button
+                  onClick={cancelGlobalBreak}
+                  className="px-5 py-1.5 rounded-lg text-sm font-semibold border border-red-500 text-red-500 hover:bg-red-500 hover:text-white transition-colors"
+                >
+                  Cancel Global Break
+                </button>
+              ) : (
+                <button
+                  onClick={startGlobalBreak}
+                  disabled={duration === null}
+                  className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                    duration !== null
+                      ? 'bg-accent text-accent-text hover:bg-accent-hover'
+                      : 'bg-surface border border-border text-secondary cursor-not-allowed'
                   }`}
-              >
-                {buttonLabel}
-              </button>
+                >
+                  {buttonLabel}
+                </button>
+              )}
             </div>
           </CardContent>
         )}
