@@ -251,7 +251,9 @@ describe('PlatformService.cancelGlobalBreak', () => {
     gw.emitPlatformUpdate.mockClear();
     svc.cancelGlobalBreak();
 
-    const p2Emits = gw.emitPlatformUpdate.mock.calls.filter((c) => c[0] === 'p2');
+    const p2Emits = gw.emitPlatformUpdate.mock.calls.filter(
+      (c) => c[0] === 'p2',
+    );
     expect(p2Emits).toHaveLength(0);
   });
 
