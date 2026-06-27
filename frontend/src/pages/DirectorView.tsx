@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PlatformCard } from '@/components/PlatformCard'
-import { platformAction } from '@/hooks/usePlatformSocket'
+import { API, platformAction } from '@/hooks/usePlatformSocket'
 import { formatTime } from '@/lib/platformHelpers'
 import { STORAGE_KEY, type StoredMeetConfig } from '@/lib/platformTypes'
 
@@ -38,6 +38,14 @@ export default function DirectorView() {
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
+  }, [])
+
+  // Restore break indicator after a page refresh by querying the backend on mount
+  useEffect(() => {
+    fetch(`${API}/platforms/break`)
+      .then((r) => (r.ok ? (r.json() as Promise<{ endsAt: number } | null>) : null))
+      .then((data) => { if (data?.endsAt) setBreakEndsAt(data.endsAt) })
+      .catch(() => {})
   }, [])
 
   const globalBreakActive = breakEndsAt !== null && now < breakEndsAt

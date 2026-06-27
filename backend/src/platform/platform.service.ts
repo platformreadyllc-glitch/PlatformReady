@@ -260,6 +260,17 @@ export class PlatformService {
     }
   }
 
+  getGlobalBreak(): { endsAt: number } | null {
+    if (!this.globalBreak) return null;
+    const elapsed = performance.now() / 1000 - this.globalBreak.startedAt;
+    const remaining = Math.max(0, this.globalBreak.duration - elapsed);
+    if (remaining <= 0) {
+      this.globalBreak = null;
+      return null;
+    }
+    return { endsAt: Date.now() + remaining * 1000 };
+  }
+
   cancelPlatformBreak(platformId: string) {
     const platform = this.getPlatform(platformId);
     if (platform.clock.mode !== ClockMode.BREAK) return platform.serialize();

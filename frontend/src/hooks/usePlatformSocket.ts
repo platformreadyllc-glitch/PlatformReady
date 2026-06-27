@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
 import type { ClockSnapshot } from '@/lib/platformTypes'
 
-const API = 'http://localhost:3000'
+export const API = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
 
 export interface BackendPlatformState {
   platformId: string
