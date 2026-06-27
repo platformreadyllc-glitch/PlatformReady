@@ -138,6 +138,100 @@ describe('PlatformService.startGlobalBreak', () => {
   });
 });
 
+describe('PlatformService.cancelPlatformBreak', () => {
+  it('resets a breaking platform to ACTIVE and emits update', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw);
+    svc.ensurePlatform({ platformId: 'p1' });
+    svc.startPlatformBreak('p1', 300);
+    gw.emitPlatformUpdate.mockClear();
+
+    svc.cancelPlatformBreak('p1');
+
+    expect(svc.getPlatform('p1').clock.mode).toBe(ClockMode.ACTIVE);
+    expect(gw.emitPlatformUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('is a no-op when the platform is not in BREAK', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw);
+    svc.ensurePlatform({ platformId: 'p1' });
+    gw.emitPlatformUpdate.mockClear();
+
+    svc.cancelPlatformBreak('p1');
+
+    expect(svc.getPlatform('p1').clock.mode).toBe(ClockMode.ACTIVE);
+    expect(gw.emitPlatformUpdate).not.toHaveBeenCalled();
+  });
+
+  it('cancels the pending break reset timer so it does not fire after cancellation', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw);
+    svc.ensurePlatform({ platformId: 'p1' });
+    svc.startPlatformBreak('p1', 1);
+    svc.cancelPlatformBreak('p1');
+
+    gw.emitPlatformUpdate.mockClear();
+    jest.advanceTimersByTime(2000);
+
+    expect(gw.emitPlatformUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('PlatformService.cancelGlobalBreak', () => {
+  it('resets all breaking platforms to ACTIVE and emits global update', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw);
+    svc.ensurePlatform({ platformId: 'p1' });
+    svc.ensurePlatform({ platformId: 'p2' });
+    svc.startGlobalBreak(600);
+
+    svc.cancelGlobalBreak();
+
+    expect(svc.getPlatform('p1').clock.mode).toBe(ClockMode.ACTIVE);
+    expect(svc.getPlatform('p2').clock.mode).toBe(ClockMode.ACTIVE);
+    expect(gw.emitGlobalUpdate).toHaveBeenCalledTimes(2);
+  });
+
+  it('cancels pending reset timers so they do not fire after cancellation', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw);
+    svc.ensurePlatform({ platformId: 'p1' });
+    svc.startGlobalBreak(1);
+    svc.cancelGlobalBreak();
+
+    gw.emitPlatformUpdate.mockClear();
+    jest.advanceTimersByTime(2000);
+
+    expect(gw.emitPlatformUpdate).not.toHaveBeenCalled();
+  });
+
+  it('does not affect platforms that are not in BREAK', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw);
+    svc.ensurePlatform({ platformId: 'p1' });
+    svc.ensurePlatform({ platformId: 'p2' });
+    svc.startPlatformBreak('p1', 300);
+
+    gw.emitPlatformUpdate.mockClear();
+    svc.cancelGlobalBreak();
+
+    const p2Emits = gw.emitPlatformUpdate.mock.calls.filter((c) => c[0] === 'p2');
+    expect(p2Emits).toHaveLength(0);
+  });
+
+  it('clears the global break record so late-joining platforms do not inherit it', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw);
+    svc.ensurePlatform({ platformId: 'p1' });
+    svc.startGlobalBreak(600);
+    svc.cancelGlobalBreak();
+
+    const result = svc.ensurePlatform({ platformId: 'p2' });
+    expect(result.clock.mode).toBe(ClockMode.ACTIVE);
+  });
+});
+
 describe('PlatformService.scheduleBreakReset', () => {
   it('resets clock to ACTIVE after the break duration elapses', () => {
     const gw = makeGateway();
