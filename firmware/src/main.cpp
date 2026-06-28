@@ -53,33 +53,45 @@ static void runWiFiManager(bool forcePortal) {
 
 void setup() {
   Serial.begin(115200);
+  delay(2000);  // give serial monitor time to connect
+  Serial.println("[boot] serial ready");
 
+  Serial.println("[boot] hapticInit");
   hapticInit();
+
+  Serial.println("[boot] displayInit");
   displayInit();
+  Serial.println("[boot] displayInit done");
 
   // Load saved config (may be empty on first boot)
+  Serial.println("[boot] configLoad");
   configLoad(cfg);
+  Serial.printf("[boot] configLoad done: serial=%s host=%s platform=%s role=%s\n",
+    cfg.serial.c_str(), cfg.backendHost.c_str(), cfg.platformId.c_str(), cfg.role.c_str());
 
   // Check for forced config mode: hold BTN_CONFIG at power-on
   pinMode(BTN_CONFIG, INPUT_PULLUP);
   bool forceConfig = !cfg.configured || (digitalRead(BTN_CONFIG) == LOW);
+  Serial.printf("[boot] forceConfig=%d configured=%d\n", forceConfig, cfg.configured);
 
   String typeLabel = cfg.type == RemoteType::CHIEF ? "Chief Judge" : "Side Referee";
   displayShowConnecting(cfg.serial, typeLabel);
 
   // ── Network: Ethernet first, then WiFi ──────────────────────────────────
+  Serial.println("[boot] networkTryEthernet");
   bool ethUp = networkTryEthernet();
+  Serial.printf("[boot] ethUp=%d\n", ethUp);
 
   if (ethUp) {
-    // Ethernet is active — config portal lives on the board's web server
     if (forceConfig) {
-      webConfigRunEthernet(cfg);  // blocks until saved, then restarts
+      webConfigRunEthernet(cfg);
     }
-    networkBeginWiFi();  // marks WiFi as inactive (no-op, just sets flag)
-  } else {
-    // No Ethernet cable — use WiFi via WiFiManager
     networkBeginWiFi();
+  } else {
+    networkBeginWiFi();
+    Serial.println("[boot] runWiFiManager");
     runWiFiManager(forceConfig);
+    Serial.println("[boot] runWiFiManager done");
   }
 
   // ── Init subsystems ──────────────────────────────────────────────────────
@@ -89,10 +101,12 @@ void setup() {
 
   displayShowActive(cfg.platformId, cfg.role, "CONNECTING");
   hapticPulse(80);
+  Serial.println("[boot] setup done");
 }
 
 void loop() {
   if (!networkConnected()) {
+    Serial.println("[loop] no network");
     displayShowError("No network");
     delay(2000);
     return;
@@ -101,7 +115,9 @@ void loop() {
   // Register with backend once — retry every 5 s on failure
   if (!registered && millis() - lastRegisterAttempt > 5000) {
     lastRegisterAttempt = millis();
+    Serial.println("[loop] registering...");
     ApiResult r = apiRegisterRemote(cfg.role);
+    Serial.printf("[loop] register result=%d\n", (int)r);
     // OK: freshly registered.  SERVER_ERROR: probably already registered — proceed anyway.
     if (r == ApiResult::OK || r == ApiResult::SERVER_ERROR) {
       registered  = true;
