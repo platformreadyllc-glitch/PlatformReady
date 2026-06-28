@@ -32,6 +32,9 @@ static void generateMac() {
 }
 
 bool networkTryEthernet() {
+#ifdef SKIP_ETHERNET
+  return false;
+#else
   generateMac();
 
   pinMode(ETH_RST, OUTPUT);
@@ -49,6 +52,7 @@ bool networkTryEthernet() {
 
   g_ethernet = true;
   return true;
+#endif
 }
 
 bool networkBeginWiFi() {
