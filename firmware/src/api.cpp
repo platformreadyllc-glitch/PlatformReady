@@ -53,11 +53,7 @@ ApiResult apiRegisterRemote(const String& role) {
   doc["role"]         = role;
   doc["hasVibration"] = true;
   doc["hasDisplay"]   = true;
-  // Register as spare so we don't conflict with the kb-* active slots.
-  // A frontend remote-management page can deactivate a kb-* remote and
-  // activate this one via the substitute endpoint.
-  doc["isSpare"] = true;
-  doc["active"]  = false;
+  doc["active"]       = false;
   String body;
   serializeJson(doc, body);
   return post("/platforms/" + g_platformId + "/remotes", body);
