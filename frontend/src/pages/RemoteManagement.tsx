@@ -206,7 +206,7 @@ export default function RemoteManagement() {
                         <th className="pb-2 pr-4 font-medium">Remote ID</th>
                         <th className="pb-2 pr-4 font-medium">Type</th>
                         <th className="pb-2 pr-4 font-medium">Hardware</th>
-                        <th className="pb-2 font-medium">Activate as</th>
+                        <th className="pb-2 font-medium">Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -220,43 +220,38 @@ export default function RemoteManagement() {
                             <td className="py-2 pr-4 text-secondary">{remoteType(incoming.remoteId)}</td>
                             <td className="py-2 pr-4 text-secondary">{hardwareLabel(incoming)}</td>
                             <td className="py-2">
-                              <div className="flex flex-wrap gap-2">
-                                {hasOpenSlot ? (
-                                  /* Open slot — just activate, role stays as registered */
+                              {hasOpenSlot ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() =>
+                                    handleActivate(platform.platformId, incoming.remoteId)
+                                  }
+                                >
+                                  Activate
+                                </Button>
+                              ) : (() => {
+                                const outgoing = activeList.find((a) => a.role === incoming.role)
+                                return outgoing ? (
                                   <Button
                                     variant="outline"
                                     size="sm"
                                     onClick={() =>
-                                      handleActivate(platform.platformId, incoming.remoteId)
+                                      handleReplace(
+                                        platform.platformId,
+                                        incoming.remoteId,
+                                        outgoing.remoteId,
+                                      )
                                     }
                                   >
-                                    Activate
+                                    Replace {incoming.role}
                                   </Button>
                                 ) : (
-                                  /* All slots full — offer to replace each active remote */
-                                  ROLE_ORDER.map((role) => {
-                                    const outgoing = activeList.find((a) => a.role === role)
-                                    if (!outgoing) return null
-                                    return (
-                                      <Button
-                                        key={role}
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() =>
-                                          handleReplace(
-                                            platform.platformId,
-                                            incoming.remoteId,
-                                            outgoing.remoteId,
-                                            role,
-                                          )
-                                        }
-                                      >
-                                        → {role}
-                                      </Button>
-                                    )
-                                  })
-                                )}
-                              </div>
+                                  <span className="text-secondary text-sm">
+                                    No active {incoming.role} to replace
+                                  </span>
+                                )
+                              })()}
                             </td>
                           </tr>
                         )
