@@ -216,6 +216,28 @@ export class PlatformService {
     return platform.serialize();
   }
 
+  activateRemote(platformId: string, remoteId: string) {
+    const platform = this.getPlatform(platformId);
+    try {
+      platform.activateRemote(remoteId);
+      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+      return platform.serialize();
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
+  }
+
+  deactivateRemote(platformId: string, remoteId: string) {
+    const platform = this.getPlatform(platformId);
+    try {
+      platform.deactivateRemote(remoteId);
+      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+      return platform.serialize();
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
+  }
+
   replaceRemote(platformId: string, dto: ReplaceRemoteDto) {
     const platform = this.getPlatform(platformId);
     try {

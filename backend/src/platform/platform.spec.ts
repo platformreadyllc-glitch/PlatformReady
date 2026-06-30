@@ -509,6 +509,25 @@ describe('Platform', () => {
     expect(result!.outcome).toBe('good');
   });
 
+  it('activateRemote moves remote from inactive to active', () => {
+    const platform = new Platform({ platformId: 'act1' });
+    platform.registerRemote('left-1', 'left', { active: true });
+    platform.registerRemote('phys-1', 'right', { active: false });
+    platform.activateRemote('phys-1');
+    expect(platform.activeRemotes.has('phys-1')).toBe(true);
+    expect(platform.inactiveRemotes.has('phys-1')).toBe(false);
+    expect(platform.activeRemotes.size).toBe(2);
+  });
+
+  it('deactivateRemote moves remote from active to inactive', () => {
+    const platform = new Platform({ platformId: 'deact1' });
+    platform.registerRemote('left-1', 'left', { active: true });
+    platform.deactivateRemote('left-1');
+    expect(platform.inactiveRemotes.has('left-1')).toBe(true);
+    expect(platform.activeRemotes.has('left-1')).toBe(false);
+    expect(platform.activeRemotes.size).toBe(0);
+  });
+
   // Clock integration
 
   it('clock button starts clock via platform', () => {

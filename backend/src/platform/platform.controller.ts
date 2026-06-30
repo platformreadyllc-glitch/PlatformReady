@@ -72,6 +72,19 @@ export class PlatformController {
     return this.platformService.pressClockButton(id, body.remoteId);
   }
 
+  @Post(':id/remotes/:remoteId/activate')
+  activateRemote(@Param('id') id: string, @Param('remoteId') remoteId: string) {
+    return this.platformService.activateRemote(id, remoteId);
+  }
+
+  @Post(':id/remotes/:remoteId/deactivate')
+  deactivateRemote(
+    @Param('id') id: string,
+    @Param('remoteId') remoteId: string,
+  ) {
+    return this.platformService.deactivateRemote(id, remoteId);
+  }
+
   @Post(':id/remotes/replace')
   replaceRemote(@Param('id') id: string, @Body() dto: ReplaceRemoteDto) {
     return this.platformService.replaceRemote(id, dto);
