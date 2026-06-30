@@ -92,12 +92,20 @@ export default function RemoteManagement() {
     platformId: string,
     incomingRemoteId: string,
     outgoingRemoteId: string,
-    newRole?: string,
   ) {
     await fetch(`${API}/platforms/${platformId}/remotes/replace`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ incomingRemoteId, outgoingRemoteId, newRole }),
+      body: JSON.stringify({ incomingRemoteId, outgoingRemoteId }),
+    })
+    await fetchPlatforms()
+  }
+
+  async function handleTransfer(fromPlatformId: string, remoteId: string, targetPlatformId: string) {
+    await fetch(`${API}/platforms/${fromPlatformId}/remotes/${remoteId}/transfer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetPlatformId }),
     })
     await fetchPlatforms()
   }
@@ -213,6 +221,9 @@ export default function RemoteManagement() {
                       {inactiveList.map((incoming) => {
                         const activeCount = activeList.length
                         const hasOpenSlot = activeCount < 3
+                        const otherPlatforms = platforms.filter(
+                          (p) => p.platformId !== platform.platformId,
+                        )
 
                         return (
                           <tr key={incoming.remoteId} className="border-b border-border last:border-0">
@@ -220,38 +231,56 @@ export default function RemoteManagement() {
                             <td className="py-2 pr-4 text-secondary">{remoteType(incoming.remoteId)}</td>
                             <td className="py-2 pr-4 text-secondary">{hardwareLabel(incoming)}</td>
                             <td className="py-2">
-                              {hasOpenSlot ? (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() =>
-                                    handleActivate(platform.platformId, incoming.remoteId)
-                                  }
-                                >
-                                  Activate
-                                </Button>
-                              ) : (() => {
-                                const outgoing = activeList.find((a) => a.role === incoming.role)
-                                return outgoing ? (
+                              <div className="flex flex-wrap gap-2">
+                                {hasOpenSlot ? (
                                   <Button
                                     variant="outline"
                                     size="sm"
                                     onClick={() =>
-                                      handleReplace(
+                                      handleActivate(platform.platformId, incoming.remoteId)
+                                    }
+                                  >
+                                    Activate
+                                  </Button>
+                                ) : (() => {
+                                  const outgoing = activeList.find((a) => a.role === incoming.role)
+                                  return outgoing ? (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() =>
+                                        handleReplace(
+                                          platform.platformId,
+                                          incoming.remoteId,
+                                          outgoing.remoteId,
+                                        )
+                                      }
+                                    >
+                                      Replace {incoming.role}
+                                    </Button>
+                                  ) : (
+                                    <span className="text-secondary text-sm">
+                                      No active {incoming.role} to replace
+                                    </span>
+                                  )
+                                })()}
+                                {otherPlatforms.map((target) => (
+                                  <Button
+                                    key={target.platformId}
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleTransfer(
                                         platform.platformId,
                                         incoming.remoteId,
-                                        outgoing.remoteId,
+                                        target.platformId,
                                       )
                                     }
                                   >
-                                    Replace {incoming.role}
+                                    Move to {target.name ?? target.platformId}
                                   </Button>
-                                ) : (
-                                  <span className="text-secondary text-sm">
-                                    No active {incoming.role} to replace
-                                  </span>
-                                )
-                              })()}
+                                ))}
+                              </div>
                             </td>
                           </tr>
                         )
