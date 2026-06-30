@@ -37,12 +37,26 @@ export default function RemoteManagement() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const activePlatformIds = readActivePlatforms().map((_, i) => `platform-${i + 1}`)
-
   const fetchPlatforms = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
+      const configured = readActivePlatforms()
+      const activePlatformIds = configured.map((_, i) => `platform-${i + 1}`)
+
+      // Ensure every configured platform exists in the backend before fetching.
+      // This mirrors what the platform display pages do on mount, so Remote
+      // Management works without requiring those pages to have been visited first.
+      await Promise.all(
+        configured.map((p, i) =>
+          fetch(`${API}/platforms/ensure`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ platformId: `platform-${i + 1}`, name: p.name }),
+          }),
+        ),
+      )
+
       const res = await fetch(`${API}/platforms`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const byId: Record<string, PlatformFull> = await res.json()
@@ -56,7 +70,7 @@ export default function RemoteManagement() {
     } finally {
       setLoading(false)
     }
-  }, [activePlatformIds.join(',')])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => { fetchPlatforms() }, [fetchPlatforms])
 
