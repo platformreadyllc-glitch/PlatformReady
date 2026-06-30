@@ -1,3 +1,17 @@
+import { STORAGE_KEY, type StoredMeetConfig } from '@/lib/platformTypes'
+
+export function readActivePlatforms(): Array<{ name: string }> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return []
+    const config: StoredMeetConfig = JSON.parse(raw)
+    const platforms = config.days?.[0]?.platforms ?? []
+    return platforms.filter((p) => p.active)
+  } catch {
+    return []
+  }
+}
+
 export function formatTime(totalSeconds: number): string {
   const m = Math.floor(totalSeconds / 60)
   const s = Math.floor(totalSeconds % 60)
