@@ -113,6 +113,14 @@ export class Platform {
     return remote;
   }
 
+  addRemote(remote: Remote): void {
+    if (this.allRemotes().size >= MAX_TOTAL_REMOTES) {
+      throw new Error(`Platform ${this.platformId} already has ${MAX_TOTAL_REMOTES} remotes`);
+    }
+    remote.platformId = this.platformId;
+    this.inactiveRemotes.set(remote.remoteId, remote);
+  }
+
   removeRemote(remoteId: string): Remote {
     const remote =
       this.activeRemotes.get(remoteId) ?? this.inactiveRemotes.get(remoteId);

@@ -2,6 +2,9 @@ import { Platform, PlatformSerialized } from './platform';
 
 export class PlatformManager {
   private _platforms: Map<string, Platform> = new Map();
+  // Explicit assignment overrides for re-registration after reboot.
+  // Only set by transferRemote; never auto-set on initial registration.
+  private _remoteClaims: Map<string, string> = new Map();
 
   addPlatform(platform: Platform): void {
     if (this._platforms.has(platform.platformId)) {
@@ -43,6 +46,24 @@ export class PlatformManager {
       }
     }
     return null;
+  }
+
+  getRemoteClaim(remoteId: string): string | undefined {
+    return this._remoteClaims.get(remoteId);
+  }
+
+  transferRemote(remoteId: string, targetPlatformId: string): void {
+    const target = this.getPlatform(targetPlatformId);
+    const current = this.findRemotePlatform(remoteId);
+    if (!current) {
+      throw new Error(`Remote ${remoteId} not found on any platform`);
+    }
+    if (current.platformId === targetPlatformId) {
+      throw new Error(`Remote ${remoteId} is already on platform ${targetPlatformId}`);
+    }
+    const remote = current.removeRemote(remoteId);
+    target.addRemote(remote);
+    this._remoteClaims.set(remoteId, targetPlatformId);
   }
 
   startGlobalBreak(durationSeconds: number): void {

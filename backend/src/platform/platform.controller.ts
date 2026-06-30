@@ -4,6 +4,7 @@ import { CreatePlatformDto } from './dto/create-platform.dto';
 import { RegisterRemoteDto } from './dto/register-remote.dto';
 import { CastVoteDto } from './dto/cast-vote.dto';
 import { ReplaceRemoteDto } from './dto/replace-remote.dto';
+import { TransferRemoteDto } from './dto/transfer-remote.dto';
 import { StartGlobalBreakDto } from './dto/start-global-break.dto';
 import { EnsurePlatformDto } from './dto/ensure-platform.dto';
 
@@ -88,6 +89,15 @@ export class PlatformController {
   @Post(':id/remotes/replace')
   replaceRemote(@Param('id') id: string, @Body() dto: ReplaceRemoteDto) {
     return this.platformService.replaceRemote(id, dto);
+  }
+
+  @Post(':id/remotes/:remoteId/transfer')
+  transferRemote(
+    @Param('id') id: string,
+    @Param('remoteId') remoteId: string,
+    @Body() dto: TransferRemoteDto,
+  ) {
+    return this.platformService.transferRemote(id, remoteId, dto);
   }
 
   @Post(':id/reset')

@@ -9,6 +9,7 @@ import { Button, Role, ClockMode, ClockState } from './models/enums';
 import { CreatePlatformDto } from './dto/create-platform.dto';
 import { RegisterRemoteDto } from './dto/register-remote.dto';
 import { ReplaceRemoteDto } from './dto/replace-remote.dto';
+import { TransferRemoteDto } from './dto/transfer-remote.dto';
 import { EnsurePlatformDto } from './dto/ensure-platform.dto';
 import { PlatformGateway } from './platform.gateway';
 
@@ -102,7 +103,28 @@ export class PlatformService {
   }
 
   registerRemote(platformId: string, dto: RegisterRemoteDto) {
-    const platform = this.getPlatform(platformId);
+    // If this remote has been explicitly transferred to another platform,
+    // register it there regardless of what the firmware has configured.
+    const claimedPlatformId = this.manager.getRemoteClaim(dto.remoteId);
+    const actualPlatformId = claimedPlatformId ?? platformId;
+    const platform = this.getPlatform(actualPlatformId);
+
+    // If the remote re-registered from its old platform after a transfer,
+    // clean up any stale record on the originally-requested platform.
+    if (claimedPlatformId && claimedPlatformId !== platformId) {
+      const requestedPlatform = this.manager.hasPlatform(platformId)
+        ? this.manager.getPlatform(platformId)
+        : null;
+      if (requestedPlatform?.hasRemote(dto.remoteId)) {
+        requestedPlatform.removeRemote(dto.remoteId);
+      }
+    }
+
+    // Idempotent: if the remote is already registered here, return it as-is.
+    if (platform.hasRemote(dto.remoteId)) {
+      return platform.getRemote(dto.remoteId).serialize();
+    }
+
     try {
       const remote = platform.registerRemote(dto.remoteId, dto.role as Role, {
         hasVibration: dto.hasVibration,
@@ -248,6 +270,24 @@ export class PlatformService {
       );
       this.gateway.emitPlatformUpdate(platformId, platform.serialize());
       return platform.serialize();
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
+  }
+
+  transferRemote(platformId: string, remoteId: string, dto: TransferRemoteDto) {
+    try {
+      this.manager.transferRemote(remoteId, dto.targetPlatformId);
+      this.gateway.emitPlatformUpdate(platformId, this.getPlatform(platformId).serialize());
+      this.gateway.emitPlatformUpdate(
+        dto.targetPlatformId,
+        this.getPlatform(dto.targetPlatformId).serialize(),
+      );
+      return {
+        fromPlatformId: platformId,
+        targetPlatformId: dto.targetPlatformId,
+        remoteId,
+      };
     } catch (e) {
       throw new BadRequestException((e as Error).message);
     }
