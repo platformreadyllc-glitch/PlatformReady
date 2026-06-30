@@ -8,6 +8,7 @@ import { Platform } from './models/platform';
 import { Button, Role, ClockMode, ClockState } from './models/enums';
 import { CreatePlatformDto } from './dto/create-platform.dto';
 import { RegisterRemoteDto } from './dto/register-remote.dto';
+import { ReplaceRemoteDto } from './dto/replace-remote.dto';
 import { EnsurePlatformDto } from './dto/ensure-platform.dto';
 import { PlatformGateway } from './platform.gateway';
 
@@ -54,9 +55,9 @@ export class PlatformService {
         name: dto.name,
       });
       this.manager.addPlatform(platform);
-      platform.registerRemote('kb-left', 'left' as Role);
-      platform.registerRemote('kb-chief', 'chief' as Role);
-      platform.registerRemote('kb-right', 'right' as Role);
+      platform.registerRemote('kb-left',  'left'  as Role, { active: true });
+      platform.registerRemote('kb-chief', 'chief' as Role, { active: true });
+      platform.registerRemote('kb-right', 'right' as Role, { active: true });
 
       // If a global break is in progress, sync this platform into it so it
       // can't accept votes while all other platforms are locked.
@@ -104,7 +105,6 @@ export class PlatformService {
     const platform = this.getPlatform(platformId);
     try {
       const remote = platform.registerRemote(dto.remoteId, dto.role as Role, {
-        isSpare: dto.isSpare,
         hasVibration: dto.hasVibration,
         hasDisplay: dto.hasDisplay,
         active: dto.active,
@@ -216,10 +216,14 @@ export class PlatformService {
     return platform.serialize();
   }
 
-  substituteSpare(platformId: string, targetRole: Role) {
+  replaceRemote(platformId: string, dto: ReplaceRemoteDto) {
     const platform = this.getPlatform(platformId);
     try {
-      platform.substituteSpare(targetRole);
+      platform.swapRemotes(
+        dto.incomingRemoteId,
+        dto.outgoingRemoteId,
+        dto.newRole as Role | undefined,
+      );
       this.gateway.emitPlatformUpdate(platformId, platform.serialize());
       return platform.serialize();
     } catch (e) {

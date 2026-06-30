@@ -3,7 +3,7 @@ import { PlatformService } from './platform.service';
 import { CreatePlatformDto } from './dto/create-platform.dto';
 import { RegisterRemoteDto } from './dto/register-remote.dto';
 import { CastVoteDto } from './dto/cast-vote.dto';
-import { SubstituteSpareDto } from './dto/substitute-spare.dto';
+import { ReplaceRemoteDto } from './dto/replace-remote.dto';
 import { StartGlobalBreakDto } from './dto/start-global-break.dto';
 import { EnsurePlatformDto } from './dto/ensure-platform.dto';
 
@@ -72,9 +72,9 @@ export class PlatformController {
     return this.platformService.pressClockButton(id, body.remoteId);
   }
 
-  @Post(':id/substitute')
-  substituteSpare(@Param('id') id: string, @Body() dto: SubstituteSpareDto) {
-    return this.platformService.substituteSpare(id, dto.targetRole);
+  @Post(':id/remotes/replace')
+  replaceRemote(@Param('id') id: string, @Body() dto: ReplaceRemoteDto) {
+    return this.platformService.replaceRemote(id, dto);
   }
 
   @Post(':id/reset')

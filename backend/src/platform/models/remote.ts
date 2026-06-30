@@ -4,7 +4,6 @@ export interface RemoteSerialized {
   remoteId: string;
   role: Role;
   platformId: string;
-  isSpare: boolean;
   hasVibration: boolean;
   hasDisplay: boolean;
   hasClockButton: boolean;
@@ -21,10 +20,8 @@ export class Remote {
   remoteId: string;
   role: Role;
   platformId: string;
-  isSpare: boolean;
   hasVibration: boolean;
   hasDisplay: boolean;
-  hasClockButton: boolean;
   connected: boolean = false;
   batteryLevel: number | null = null;
   lastButtonPressed: Button | null = null;
@@ -35,7 +32,6 @@ export class Remote {
     remoteId: string;
     role: Role;
     platformId: string;
-    isSpare?: boolean;
     hasVibration?: boolean;
     hasDisplay?: boolean;
     metadata?: Record<string, unknown>;
@@ -43,17 +39,13 @@ export class Remote {
     this.remoteId = params.remoteId;
     this.role = params.role;
     this.platformId = params.platformId;
-    this.isSpare = params.isSpare ?? false;
     this.hasVibration = params.hasVibration ?? false;
     this.hasDisplay = params.hasDisplay ?? false;
     this.metadata = params.metadata ?? {};
+  }
 
-    const isChiefOrSpare = this.role === 'chief' || this.isSpare;
-    this.hasClockButton = isChiefOrSpare;
-
-    if (!isChiefOrSpare && this.hasClockButton) {
-      throw new Error(`Role ${this.role} cannot have a clock button`);
-    }
+  get hasClockButton(): boolean {
+    return this.role === 'chief';
   }
 
   get buttonCount(): number {
@@ -66,18 +58,6 @@ export class Remote {
       buttons.push('clock');
     }
     return buttons;
-  }
-
-  configureSpareAs(targetRole: Role): void {
-    if (!this.isSpare) {
-      throw new Error('Only spare remotes can be reconfigured');
-    }
-    if (targetRole === 'spare') {
-      throw new Error(`Target role must be one of: left, right, chief`);
-    }
-    this.role = targetRole;
-    this.isSpare = false;
-    // hasClockButton is a hardware property — preserved regardless of new role
   }
 
   pressButton(buttonName: Button): void {
@@ -114,7 +94,6 @@ export class Remote {
       remoteId: this.remoteId,
       role: this.role,
       platformId: this.platformId,
-      isSpare: this.isSpare,
       hasVibration: this.hasVibration,
       hasDisplay: this.hasDisplay,
       hasClockButton: this.hasClockButton,
