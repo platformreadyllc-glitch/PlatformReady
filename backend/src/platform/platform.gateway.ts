@@ -7,11 +7,11 @@ import { Server, Socket } from 'socket.io';
 import { PlatformSerialized } from './models/platform';
 
 @WebSocketGateway({
-  cors: { origin: process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173' },
+  cors: { origin: process.env.FRONTEND_ORIGIN ?? true },
 })
 export class PlatformGateway {
   @WebSocketServer()
-  server: Server;
+  server!: Server;
 
   @SubscribeMessage('join-platform')
   handleJoin(client: Socket, platformId: string): void {
