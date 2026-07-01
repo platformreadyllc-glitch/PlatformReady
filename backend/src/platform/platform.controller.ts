@@ -33,10 +33,15 @@ export class PlatformController {
     return this.platformService.createPlatform(dto).serialize();
   }
 
-  // Must be declared before @Get(':id') so 'break' isn't matched as an id
+  // Must be declared before @Get(':id') so 'break'/'pool' aren't matched as ids
   @Get('break')
   getGlobalBreak() {
     return this.platformService.getGlobalBreak();
+  }
+
+  @Get('pool')
+  getPool() {
+    return this.platformService.getPool();
   }
 
   @Get(':id')

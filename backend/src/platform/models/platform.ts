@@ -23,7 +23,6 @@ export interface PlatformSerialized {
   name: string | null;
   metadata: Record<string, unknown>;
   activeRemotes: Record<string, ReturnType<Remote['serialize']>>;
-  inactiveRemotes: Record<string, ReturnType<Remote['serialize']>>;
   decisionDelay: number;
   clock: ReturnType<PlatformClock['serialize']>;
   votes: Record<string, Button | null>;
@@ -318,16 +317,11 @@ export class Platform {
     for (const [id, remote] of this.activeRemotes) {
       activeRemotes[id] = remote.serialize();
     }
-    const inactiveRemotes: Record<string, ReturnType<Remote['serialize']>> = {};
-    for (const [id, remote] of this.inactiveRemotes) {
-      inactiveRemotes[id] = remote.serialize();
-    }
     return {
       platformId: this.platformId,
       name: this.name,
       metadata: this.metadata,
       activeRemotes,
-      inactiveRemotes,
       decisionDelay: this.decisionDelay,
       clock: this.clock.serialize(t),
       votes: this.getRefereeVotes(),

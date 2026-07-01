@@ -20,16 +20,19 @@ interface RemoteSerialized {
   hasDisplay: boolean
 }
 
+interface PoolEntry extends RemoteSerialized {
+  sourcePlatformId: string | null
+}
+
 interface PlatformFull {
   platformId: string
   name: string | null
   activeRemotes: Record<string, RemoteSerialized>
-  inactiveRemotes: Record<string, RemoteSerialized>
 }
 
 interface DragData {
   remoteId: string
-  sourcePlatformId: string
+  sourcePlatformId: string | null
   role: string
   isActive: boolean
 }
@@ -124,14 +127,20 @@ function PlatformRemoteCard({ platform }: { platform: PlatformFull }) {
   )
 }
 
-// ── Pool remote (draggable chip for an inactive remote) ──────────────────────
+// ── Pool remote (draggable chip for an unassigned remote) ─────────────────────
 
-function PoolRemote({ id, remote, sourcePlatformId }: { id: string; remote: RemoteSerialized; sourcePlatformId: string }) {
+function PoolRemote({ entry }: { entry: PoolEntry }) {
+  const dragId = `pool:${entry.sourcePlatformId ?? 'global'}:${entry.remoteId}`
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id,
-    data: { remoteId: remote.remoteId, sourcePlatformId, role: remote.role, isActive: false } as DragData,
+    id: dragId,
+    data: {
+      remoteId: entry.remoteId,
+      sourcePlatformId: entry.sourcePlatformId,
+      role: entry.role,
+      isActive: false,
+    } as DragData,
   })
-  const hw = hwTags(remote)
+  const hw = hwTags(entry)
   return (
     <div
       ref={setNodeRef}
@@ -141,9 +150,9 @@ function PoolRemote({ id, remote, sourcePlatformId }: { id: string; remote: Remo
         isDragging ? 'opacity-20' : ''
       }`}
     >
-      <span className="text-xs font-mono text-primary font-medium">{remote.remoteId}</span>
+      <span className="text-xs font-mono text-primary font-medium">{entry.remoteId}</span>
       <span className="text-xs text-secondary">
-        {isKb(remote.remoteId) ? 'keyboard' : 'physical'}
+        {isKb(entry.remoteId) ? 'keyboard' : 'physical'}
         {hw ? ` · ${hw}` : ''}
       </span>
     </div>
@@ -152,12 +161,8 @@ function PoolRemote({ id, remote, sourcePlatformId }: { id: string; remote: Remo
 
 // ── Available remotes pool (droppable) ───────────────────────────────────────
 
-function AvailablePool({ platforms }: { platforms: PlatformFull[] }) {
+function AvailablePool({ pool }: { pool: PoolEntry[] }) {
   const { setNodeRef, isOver } = useDroppable({ id: 'pool' })
-
-  const pool = platforms.flatMap((p) =>
-    Object.values(p.inactiveRemotes).map((r) => ({ ...r, sourcePlatformId: p.platformId }))
-  )
 
   return (
     <div>
@@ -173,12 +178,9 @@ function AvailablePool({ platforms }: { platforms: PlatformFull[] }) {
             Drag an active remote here to bench it
           </span>
         ) : (
-          pool.map((r) => {
-            const id = `inactive:${r.sourcePlatformId}:${r.remoteId}`
-            return (
-              <PoolRemote key={id} id={id} remote={r} sourcePlatformId={r.sourcePlatformId} />
-            )
-          })
+          pool.map((entry) => (
+            <PoolRemote key={`${entry.sourcePlatformId ?? 'global'}:${entry.remoteId}`} entry={entry} />
+          ))
         )}
       </div>
     </div>
@@ -200,6 +202,7 @@ function RemoteGhost({ remoteId }: { remoteId: string }) {
 
 export default function RemoteManagement() {
   const [platforms, setPlatforms] = useState<PlatformFull[]>([])
+  const [pool, setPool] = useState<PoolEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeDrag, setActiveDrag] = useState<DragData | null>(null)
@@ -221,11 +224,17 @@ export default function RemoteManagement() {
         )
       )
 
-      const res = await fetch(`${API}/platforms`)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const byId: Record<string, PlatformFull> = await res.json()
+      const [platformsRes, poolRes] = await Promise.all([
+        fetch(`${API}/platforms`),
+        fetch(`${API}/platforms/pool`),
+      ])
+      if (!platformsRes.ok) throw new Error(`HTTP ${platformsRes.status}`)
+      if (!poolRes.ok) throw new Error(`HTTP ${poolRes.status}`)
+
+      const byId: Record<string, PlatformFull> = await platformsRes.json()
       const all = Object.values(byId)
       setPlatforms(activePlatformIds.length > 0 ? all.filter((p) => activePlatformIds.includes(p.platformId)) : all)
+      setPool(await poolRes.json())
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -269,7 +278,7 @@ export default function RemoteManagement() {
     if (drag.role !== targetRole) return
 
     // Keyboard remotes can only go back to their own platform
-    if (isKb(drag.remoteId) && drag.sourcePlatformId !== targetPlatformId) return
+    if (isKb(drag.remoteId) && drag.sourcePlatformId !== null && drag.sourcePlatformId !== targetPlatformId) return
 
     const targetPlatform = platforms.find((p) => p.platformId === targetPlatformId)
     const occupant = targetPlatform
@@ -279,27 +288,23 @@ export default function RemoteManagement() {
     // No-op: dropping active remote onto its own current slot
     if (drag.isActive && drag.sourcePlatformId === targetPlatformId && occupant?.remoteId === drag.remoteId) return
 
-    // Transfer to target platform if the remote isn't already there
-    let effectivePlatformId = drag.sourcePlatformId
-    if (drag.sourcePlatformId !== targetPlatformId) {
-      const r = await fetch(`${API}/platforms/${drag.sourcePlatformId}/remotes/${drag.remoteId}/transfer`, {
+    // Active remote moving cross-platform: deactivate from source first (sends it to pool)
+    if (drag.isActive && drag.sourcePlatformId !== null && drag.sourcePlatformId !== targetPlatformId) {
+      const r = await fetch(`${API}/platforms/${drag.sourcePlatformId}/remotes/${drag.remoteId}/deactivate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetPlatformId }),
       })
       if (!r.ok) { await fetchPlatforms(); return }
-      effectivePlatformId = targetPlatformId
     }
 
-    // Activate or replace
+    // Activate or replace on the target platform
     if (occupant) {
-      await fetch(`${API}/platforms/${effectivePlatformId}/remotes/replace`, {
+      await fetch(`${API}/platforms/${targetPlatformId}/remotes/replace`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ incomingRemoteId: drag.remoteId, outgoingRemoteId: occupant.remoteId }),
       })
     } else {
-      await fetch(`${API}/platforms/${effectivePlatformId}/remotes/${drag.remoteId}/activate`, {
+      await fetch(`${API}/platforms/${targetPlatformId}/remotes/${drag.remoteId}/activate`, {
         method: 'POST',
       })
     }
@@ -334,7 +339,7 @@ export default function RemoteManagement() {
                 <PlatformRemoteCard key={p.platformId} platform={p} />
               ))}
             </div>
-            <AvailablePool platforms={platforms} />
+            <AvailablePool pool={pool} />
           </>
         )}
       </div>
