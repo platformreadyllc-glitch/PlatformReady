@@ -3,6 +3,7 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
+  useDndContext,
   useDraggable,
   useDroppable,
   useSensor,
@@ -50,9 +51,11 @@ function isKb(remoteId: string) {
   return remoteId.startsWith('kb-')
 }
 
-function hwTags(r: RemoteSerialized): string {
-  const tags = [r.hasVibration ? 'haptic' : '', r.hasDisplay ? 'display' : ''].filter(Boolean)
-  return tags.length ? tags.join(' · ') : ''
+function roleTag(role: string): string {
+  if (role === 'chief') return 'chief'
+  if (role === 'left') return 'left side'
+  if (role === 'right') return 'right side'
+  return role
 }
 
 // ── Active remote chip (draggable, lives inside a role slot) ─────────────────
@@ -62,7 +65,6 @@ function ActiveRemote({ remote, platformId }: { remote: RemoteSerialized; platfo
     id: `active:${platformId}:${remote.remoteId}`,
     data: { remoteId: remote.remoteId, sourcePlatformId: platformId, role: remote.role, isActive: true } as DragData,
   })
-  const hw = hwTags(remote)
   return (
     <div
       ref={setNodeRef}
@@ -74,8 +76,7 @@ function ActiveRemote({ remote, platformId }: { remote: RemoteSerialized; platfo
     >
       <span className="text-xs font-mono text-primary font-medium truncate">{remote.remoteId}</span>
       <span className="text-xs text-secondary">
-        {isKb(remote.remoteId) ? 'keyboard' : 'physical'}
-        {hw ? ` · ${hw}` : ''}
+        {isKb(remote.remoteId) ? 'keyboard' : roleTag(remote.role)}
       </span>
     </div>
   )
@@ -85,17 +86,32 @@ function ActiveRemote({ remote, platformId }: { remote: RemoteSerialized; platfo
 
 function RoleSlot({ platformId, role, remote }: { platformId: string; role: string; remote?: RemoteSerialized }) {
   const { setNodeRef, isOver } = useDroppable({ id: `slot:${platformId}:${role}`, data: { platformId, role } })
+  const { active } = useDndContext()
+  const drag = active?.data.current as DragData | undefined
+
+  let slotState: 'neutral' | 'allowed' | 'blocked' = 'neutral'
+  if (drag) {
+    const isNoOp = drag.isActive && drag.sourcePlatformId === platformId && remote?.remoteId === drag.remoteId
+    if (!isNoOp) {
+      const roleMatch = drag.role === role
+      const kbCrossPlat = isKb(drag.remoteId) && drag.sourcePlatformId !== null && drag.sourcePlatformId !== platformId
+      slotState = roleMatch && !kbCrossPlat ? 'allowed' : 'blocked'
+    }
+  }
+
+  const borderBg =
+    slotState === 'allowed'
+      ? isOver ? 'border-green-400 bg-green-400/15' : 'border-green-600/50 bg-green-500/5'
+      : slotState === 'blocked'
+        ? isOver ? 'border-red-500 bg-red-500/15' : 'border-red-500/40 bg-red-500/5'
+        : isOver
+          ? 'border-accent bg-accent/10'
+          : remote ? 'border-border bg-surface' : 'border-dashed border-border'
 
   return (
     <div
       ref={setNodeRef}
-      className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border min-h-[2.75rem] transition-colors ${
-        isOver
-          ? 'border-accent bg-accent/10'
-          : remote
-            ? 'border-border bg-surface'
-            : 'border-dashed border-border'
-      }`}
+      className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border min-h-[2.75rem] transition-colors ${borderBg}`}
     >
       <span className={`text-[11px] font-bold w-4 shrink-0 tabular-nums ${ROLE_COLOR[role] ?? 'text-secondary'}`}>
         {ROLE_LABEL[role] ?? role[0]?.toUpperCase()}
@@ -140,7 +156,6 @@ function PoolRemote({ entry }: { entry: PoolEntry }) {
       isActive: false,
     } as DragData,
   })
-  const hw = hwTags(entry)
   return (
     <div
       ref={setNodeRef}
@@ -152,8 +167,7 @@ function PoolRemote({ entry }: { entry: PoolEntry }) {
     >
       <span className="text-xs font-mono text-primary font-medium">{entry.remoteId}</span>
       <span className="text-xs text-secondary">
-        {isKb(entry.remoteId) ? 'keyboard' : 'physical'}
-        {hw ? ` · ${hw}` : ''}
+        {isKb(entry.remoteId) ? 'keyboard' : roleTag(entry.role)}
       </span>
     </div>
   )
