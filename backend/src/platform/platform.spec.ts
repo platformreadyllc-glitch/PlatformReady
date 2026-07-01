@@ -141,17 +141,6 @@ describe('Remote', () => {
     expect(remote.availableButtons).toContain('clock');
   });
 
-  it('spare remote has 5 buttons including clock', () => {
-    const remote = new Remote({
-      remoteId: 'spare-1',
-      role: 'spare',
-      platformId: 'p1',
-      isSpare: true,
-    });
-    expect(remote.buttonCount).toBe(5);
-    expect(remote.hasClockButton).toBe(true);
-  });
-
   it('records button presses', () => {
     const remote = new Remote({
       remoteId: 'left-2',
@@ -171,40 +160,6 @@ describe('Remote', () => {
       platformId: 'p1',
     });
     expect(() => remote.pressButton('clock')).toThrow();
-  });
-
-  it('configureSpareAs changes role and preserves clock button', () => {
-    const spare = new Remote({
-      remoteId: 'spare-2',
-      role: 'spare',
-      platformId: 'p1',
-      isSpare: true,
-    });
-    expect(spare.availableButtons).toContain('clock');
-    spare.configureSpareAs('left');
-    expect(spare.role).toBe('left');
-    expect(spare.hasClockButton).toBe(true);
-    spare.pressButton('clock');
-    expect(spare.lastButtonPressed).toBe('clock');
-  });
-
-  it('configureSpareAs rejects "spare" as target role', () => {
-    const spare = new Remote({
-      remoteId: 'spare-3',
-      role: 'spare',
-      platformId: 'p1',
-      isSpare: true,
-    });
-    expect(() => spare.configureSpareAs('spare')).toThrow();
-  });
-
-  it('configureSpareAs rejects non-spare remote', () => {
-    const remote = new Remote({
-      remoteId: 'left-4',
-      role: 'left',
-      platformId: 'p1',
-    });
-    expect(() => remote.configureSpareAs('right')).toThrow('spare');
   });
 
   it('connect and disconnect toggle connected state', () => {
@@ -271,7 +226,7 @@ describe('Platform', () => {
 
   it('serializes with platformId and name', () => {
     const platform = new Platform({ platformId: 'p1', name: 'Platform 1' });
-    platform.registerRemote('left', 'left');
+    platform.registerRemote('left', 'left', { active: true });
     const data = platform.serialize();
     expect(data.platformId).toBe('p1');
     expect(data.name).toBe('Platform 1');
@@ -293,25 +248,34 @@ describe('Platform', () => {
     platform.registerRemote('left-1', 'left');
     platform.registerRemote('right-1', 'right');
     platform.registerRemote('chief-1', 'chief');
-    platform.registerRemote('spare-1', 'spare', { isSpare: true });
+    platform.registerRemote('spare-1', 'spare');
     expect(platform.allRemotes().size).toBe(4);
   });
 
-  it('rejects duplicate role even for inactive registration', () => {
+  it('rejects duplicate role among active remotes', () => {
     const platform = new Platform({ platformId: 'p4' });
     platform.registerRemote('left-1', 'left', { active: true });
     expect(() =>
-      platform.registerRemote('left-2', 'left', { active: false }),
+      platform.registerRemote('left-2', 'left', { active: true }),
     ).toThrow('already assigned');
   });
 
-  it('enforces max 4 total remote slots', () => {
+  it('allows multiple inactive remotes with the same role', () => {
+    const platform = new Platform({ platformId: 'p4b' });
+    platform.registerRemote('left-1', 'left', { active: false });
+    expect(() =>
+      platform.registerRemote('left-2', 'left', { active: false }),
+    ).not.toThrow();
+  });
+
+  it('enforces max total remote slots', () => {
     const platform = new Platform({ platformId: 'p5' });
-    platform.registerRemote('left-1', 'left');
-    platform.registerRemote('right-1', 'right');
-    platform.registerRemote('chief-1', 'chief');
-    platform.registerRemote('spare-1', 'spare', { isSpare: true });
-    expect(() => platform.registerRemote('extra-1', 'left')).toThrow('already');
+    for (let i = 0; i < 10; i++) {
+      platform.registerRemote(`r-${i}`, 'spare');
+    }
+    expect(() => platform.registerRemote('extra', 'spare')).toThrow(
+      'already has 10 remotes',
+    );
   });
 
   it('enforces max 3 active remotes on registration', () => {
@@ -320,10 +284,7 @@ describe('Platform', () => {
     platform.registerRemote('right-1', 'right', { active: true });
     platform.registerRemote('chief-1', 'chief', { active: true });
     expect(() =>
-      platform.registerRemote('spare-1', 'spare', {
-        isSpare: false,
-        active: true,
-      }),
+      platform.registerRemote('spare-1', 'spare', { active: true }),
     ).toThrow('3 active remotes');
   });
 
@@ -332,10 +293,8 @@ describe('Platform', () => {
     platform.registerRemote('left-1', 'left', { active: true });
     platform.registerRemote('right-1', 'right', { active: true });
     platform.registerRemote('chief-1', 'chief', { active: true });
-    platform.registerRemote('spare-1', 'spare', { isSpare: true });
-    expect(() => platform.activateRemote('spare-1')).toThrow(
-      '3 active remotes',
-    );
+    platform.registerRemote('phys-1', 'spare', { active: false });
+    expect(() => platform.activateRemote('phys-1')).toThrow('3 active remotes');
   });
 
   it('activate succeeds after deactivating one', () => {
@@ -343,18 +302,18 @@ describe('Platform', () => {
     platform.registerRemote('left-1', 'left', { active: true });
     platform.registerRemote('right-1', 'right', { active: true });
     platform.registerRemote('chief-1', 'chief', { active: true });
-    platform.registerRemote('spare-1', 'spare', { isSpare: true });
+    platform.registerRemote('phys-1', 'spare', { active: false });
     platform.deactivateRemote('left-1');
-    platform.activateRemote('spare-1');
-    expect(platform.activeRemotes.has('spare-1')).toBe(true);
+    platform.activateRemote('phys-1');
+    expect(platform.activeRemotes.has('phys-1')).toBe(true);
     expect(platform.activeRemotes.size).toBe(3);
   });
 
-  it('spare remote auto-registered as inactive', () => {
+  it('remotes default to inactive when active not specified', () => {
     const platform = new Platform({ platformId: 'p9' });
-    platform.registerRemote('spare-1', 'spare', { isSpare: true });
-    expect(platform.inactiveRemotes.has('spare-1')).toBe(true);
-    expect(platform.activeRemotes.has('spare-1')).toBe(false);
+    platform.registerRemote('phys-1', 'left');
+    expect(platform.inactiveRemotes.has('phys-1')).toBe(true);
+    expect(platform.activeRemotes.has('phys-1')).toBe(false);
   });
 
   it('removes a remote', () => {
@@ -484,61 +443,95 @@ describe('Platform', () => {
     expect(second!.outcome).toBe('good');
   });
 
-  it('substitute spare replaces broken remote', () => {
+  it('swapRemotes replaces active remote with inactive one', () => {
     const platform = new Platform({ platformId: 'p18' });
     platform.registerRemote('left-1', 'left', { active: true });
     platform.registerRemote('right-1', 'right', { active: true });
     platform.registerRemote('chief-1', 'chief', { active: true });
-    platform.registerRemote('spare-1', 'spare', { isSpare: true });
+    platform.registerRemote('phys-1', 'chief', { active: false });
 
-    const result = platform.substituteSpare('right');
+    platform.swapRemotes('phys-1', 'chief-1');
 
-    expect(result.remoteId).toBe('spare-1');
-    expect(result.role).toBe('right');
-    expect(platform.activeRemotes.has('spare-1')).toBe(true);
-    expect(platform.inactiveRemotes.has('right-1')).toBe(true);
+    expect(platform.activeRemotes.has('phys-1')).toBe(true);
+    expect(platform.inactiveRemotes.has('chief-1')).toBe(true);
     expect(platform.activeRemotes.size).toBe(3);
   });
 
-  it('substitute spare throws if no spare registered', () => {
+  it('swapRemotes with newRole overrides incoming role', () => {
+    const platform = new Platform({ platformId: 'p18b' });
+    platform.registerRemote('left-1', 'left', { active: true });
+    platform.registerRemote('right-1', 'right', { active: true });
+    platform.registerRemote('chief-1', 'chief', { active: true });
+    platform.registerRemote('phys-1', 'chief', { active: false });
+
+    platform.swapRemotes('phys-1', 'right-1', 'right');
+
+    expect(platform.activeRemotes.get('phys-1')?.role).toBe('right');
+    expect(platform.inactiveRemotes.has('right-1')).toBe(true);
+  });
+
+  it('swapRemotes throws if incoming remote is not inactive', () => {
     const platform = new Platform({ platformId: 'p19' });
     platform.registerRemote('left-1', 'left', { active: true });
     platform.registerRemote('right-1', 'right', { active: true });
     platform.registerRemote('chief-1', 'chief', { active: true });
-    expect(() => platform.substituteSpare('right')).toThrow();
+    expect(() => platform.swapRemotes('left-1', 'right-1')).toThrow(
+      'Inactive remote',
+    );
   });
 
-  it('substitute spare throws if target role not active', () => {
+  it('swapRemotes throws if outgoing remote is not active', () => {
     const platform = new Platform({ platformId: 'p20' });
     platform.registerRemote('left-1', 'left', { active: true });
-    platform.registerRemote('spare-1', 'spare', { isSpare: true });
-    expect(() => platform.substituteSpare('right')).toThrow('right');
+    platform.registerRemote('phys-1', 'right', { active: false });
+    expect(() => platform.swapRemotes('phys-1', 'missing')).toThrow(
+      'Active remote',
+    );
   });
 
-  it('substitute spare throws for invalid role', () => {
+  it('swapRemotes throws for invalid newRole', () => {
     const platform = new Platform({ platformId: 'p21' });
     platform.registerRemote('left-1', 'left', { active: true });
-    platform.registerRemote('spare-1', 'spare', { isSpare: true });
-    expect(() => platform.substituteSpare('spare')).toThrow();
+    platform.registerRemote('phys-1', 'right', { active: false });
+    expect(() => platform.swapRemotes('phys-1', 'left-1', 'spare')).toThrow();
   });
 
-  it('substitute spare then cast vote works', () => {
+  it('swapRemotes then cast vote works', () => {
     const platform = new Platform({ platformId: 'p22', decisionDelay: 0 });
     platform.registerRemote('left-1', 'left', { active: true });
     platform.registerRemote('right-1', 'right', { active: true });
     platform.registerRemote('chief-1', 'chief', { active: true });
-    platform.registerRemote('spare-1', 'spare', { isSpare: true });
+    platform.registerRemote('phys-chief', 'chief', { active: false });
 
-    const spare = platform.substituteSpare('chief');
+    platform.swapRemotes('phys-chief', 'chief-1');
     platform.clock.start(0.0);
 
     platform.castVote('left-1', 'white');
     platform.castVote('right-1', 'white');
-    platform.castVote(spare.remoteId, 'white');
+    platform.castVote('phys-chief', 'white');
 
     const result = platform.tryDetermineOutcome(performance.now() / 1000);
     expect(result).not.toBeNull();
     expect(result!.outcome).toBe('good');
+  });
+
+  it('activateRemote moves remote from inactive to active', () => {
+    const platform = new Platform({ platformId: 'act1' });
+    platform.registerRemote('left-1', 'left', { active: true });
+    platform.registerRemote('phys-1', 'right', { active: false });
+    platform.activateRemote('phys-1');
+    expect(platform.activeRemotes.has('phys-1')).toBe(true);
+    expect(platform.inactiveRemotes.has('phys-1')).toBe(false);
+    expect(platform.activeRemotes.size).toBe(2);
+  });
+
+  it('deactivateRemote moves remote from active to inactive', () => {
+    const platform = new Platform({ platformId: 'deact1' });
+    platform.registerRemote('left-1', 'left', { active: true });
+    platform.deactivateRemote('left-1');
+    expect(platform.inactiveRemotes.has('left-1')).toBe(true);
+    expect(platform.activeRemotes.has('left-1')).toBe(false);
+    expect(platform.activeRemotes.size).toBe(0);
   });
 
   // Clock integration
@@ -568,8 +561,8 @@ describe('Platform', () => {
 
   it('clock button on inactive remote throws', () => {
     const platform = new Platform({ platformId: 'clk4' });
-    platform.registerRemote('spare-1', 'spare', { isSpare: true });
-    expect(() => platform.handleClockButton('spare-1')).toThrow();
+    platform.registerRemote('phys-1', 'chief', { active: false });
+    expect(() => platform.handleClockButton('phys-1')).toThrow();
   });
 
   it('determining outcome resets clock to ACTIVE IDLE', () => {
@@ -754,7 +747,7 @@ describe('PlatformManager', () => {
   it('serializes all platforms', () => {
     const manager = new PlatformManager();
     const platform = new Platform({ platformId: 'p3' });
-    platform.registerRemote('left', 'left');
+    platform.registerRemote('left', 'left', { active: true });
     manager.addPlatform(platform);
 
     const serialized = manager.serializeAll();

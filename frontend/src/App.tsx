@@ -1,11 +1,12 @@
 import { Monitor, Moon, Sun } from 'lucide-react'
 import { BrowserRouter, NavLink, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { useTheme, THEMES, type Theme } from '@/hooks/useTheme'
-import { STORAGE_KEY, type StoredMeetConfig } from '@/lib/platformTypes'
+import { readActivePlatforms } from '@/lib/platformHelpers'
 import MeetSetup from '@/pages/MeetSetup'
 import PlatformView from '@/pages/PlatformView'
 import ScoreTableView from '@/pages/ScoreTableView'
 import DirectorView from '@/pages/DirectorView'
+import RemoteManagement from '@/pages/RemoteManagement'
 
 const THEME_META: Record<Theme, { icon: React.ReactNode; label: string }> = {
   midnight: { icon: <Moon size={16} />, label: 'Midnight' },
@@ -26,18 +27,6 @@ const indentedNavLinkClass = ({ isActive }: { isActive: boolean }) =>
   `pl-6 pr-3 py-1.5 rounded-md text-sm transition-colors ${
     isActive ? 'bg-nav-active text-primary' : 'text-secondary hover:bg-nav-hover hover:text-primary'
   }`
-
-function readActivePlatforms(): Array<{ name: string }> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return []
-    const config: StoredMeetConfig = JSON.parse(raw)
-    const platforms = config.days?.[0]?.platforms ?? []
-    return platforms.filter((p) => p.active)
-  } catch {
-    return []
-  }
-}
 
 function Layout() {
   const { theme, cycleTheme } = useTheme()
@@ -77,6 +66,9 @@ function Layout() {
         <NavLink to="/controls" className={navLinkClass}>
           Meet Director View
         </NavLink>
+        <NavLink to="/remotes" className={navLinkClass}>
+          Remote Management
+        </NavLink>
         <button
           onClick={cycleTheme}
           className="mt-auto flex items-center justify-center w-9 h-9 rounded-md text-secondary hover:bg-nav-hover hover:text-primary transition-colors"
@@ -100,6 +92,7 @@ export default function App() {
         <Route element={<Layout />}>
           <Route index element={<MeetSetup />} />
           <Route path="/controls" element={<DirectorView />} />
+          <Route path="/remotes" element={<RemoteManagement />} />
         </Route>
         {/* Platform pages render without the sidebar — full-screen display for TVs */}
         <Route path="/platform/:id" element={<PlatformView />} />

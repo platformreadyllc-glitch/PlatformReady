@@ -10,7 +10,7 @@ import { Remote } from './remote';
 import { PlatformClock } from './platform-clock';
 import { determineDecisionOutcome, DecisionOutcome } from './decisions';
 
-const MAX_TOTAL_REMOTES = 4;
+const MAX_TOTAL_REMOTES = 10;
 const MAX_ACTIVE_REMOTES = 3;
 const DEFAULT_DECISION_DELAY = 1.0;
 
@@ -23,7 +23,6 @@ export interface PlatformSerialized {
   name: string | null;
   metadata: Record<string, unknown>;
   activeRemotes: Record<string, ReturnType<Remote['serialize']>>;
-  inactiveRemotes: Record<string, ReturnType<Remote['serialize']>>;
   decisionDelay: number;
   clock: ReturnType<PlatformClock['serialize']>;
   votes: Record<string, Button | null>;
@@ -58,7 +57,6 @@ export class Platform {
     remoteId: string,
     role: Role,
     options: {
-      isSpare?: boolean;
       hasVibration?: boolean;
       hasDisplay?: boolean;
       metadata?: Record<string, unknown>;
@@ -78,8 +76,8 @@ export class Platform {
       );
     }
 
-    const isSpare = options.isSpare ?? role === 'spare';
-    const active = options.active ?? !isSpare;
+    // Default to inactive — callers must explicitly opt in to active
+    const active = options.active ?? false;
 
     if (active && this.activeRemotes.size >= MAX_ACTIVE_REMOTES) {
       throw new Error(
@@ -87,11 +85,13 @@ export class Platform {
       );
     }
 
-    // Enforce role uniqueness across all remotes (active + inactive)
-    if (!isSpare) {
-      for (const remote of this.allRemotes().values()) {
+    // Enforce role uniqueness only among active remotes
+    if (active && role !== 'spare') {
+      for (const remote of this.activeRemotes.values()) {
         if (remote.role === role) {
-          throw new Error(`Role ${role} is already assigned`);
+          throw new Error(
+            `Role ${role} is already assigned to an active remote`,
+          );
         }
       }
     }
@@ -100,7 +100,6 @@ export class Platform {
       remoteId,
       role,
       platformId: this.platformId,
-      isSpare,
       hasVibration: options.hasVibration,
       hasDisplay: options.hasDisplay,
       metadata: options.metadata,
@@ -113,6 +112,16 @@ export class Platform {
     }
 
     return remote;
+  }
+
+  addRemote(remote: Remote): void {
+    if (this.allRemotes().size >= MAX_TOTAL_REMOTES) {
+      throw new Error(
+        `Platform ${this.platformId} already has ${MAX_TOTAL_REMOTES} remotes`,
+      );
+    }
+    remote.platformId = this.platformId;
+    this.inactiveRemotes.set(remote.remoteId, remote);
   }
 
   removeRemote(remoteId: string): Remote {
@@ -218,29 +227,27 @@ export class Platform {
     this._decisionReadyAt = null;
   }
 
-  substituteSpare(targetRole: Role): Remote {
-    if (!ACTIVE_ROLES.has(targetRole)) {
-      throw new Error(`Target role must be one of: left, right, chief`);
+  swapRemotes(
+    activateRemoteId: string,
+    deactivateRemoteId: string,
+    newRole?: Role,
+  ): void {
+    const toActivate = this.inactiveRemotes.get(activateRemoteId);
+    if (!toActivate) {
+      throw new Error(`Inactive remote ${activateRemoteId} not found`);
     }
-
-    const spare = Array.from(this.inactiveRemotes.values()).find(
-      (r) => r.isSpare,
-    );
-    if (!spare) {
-      throw new Error('No spare remote available — key: spare');
+    const toDeactivate = this.activeRemotes.get(deactivateRemoteId);
+    if (!toDeactivate) {
+      throw new Error(`Active remote ${deactivateRemoteId} not found`);
     }
-
-    const currentActive = Array.from(this.activeRemotes.values()).find(
-      (r) => r.role === targetRole,
-    );
-    if (!currentActive) {
-      throw new Error(`No active remote found for role: ${targetRole}`);
+    if (newRole) {
+      if (!VALID_ROLES.has(newRole) || newRole === 'spare') {
+        throw new Error(`newRole must be one of: left, right, chief`);
+      }
+      toActivate.role = newRole;
     }
-    this.deactivateRemote(currentActive.remoteId);
-
-    spare.configureSpareAs(targetRole);
-    this.activateRemote(spare.remoteId);
-    return spare;
+    this.deactivateRemote(deactivateRemoteId);
+    this.activateRemote(activateRemoteId);
   }
 
   handleClockButton(remoteId: string, atTime?: number): void {
@@ -314,16 +321,11 @@ export class Platform {
     for (const [id, remote] of this.activeRemotes) {
       activeRemotes[id] = remote.serialize();
     }
-    const inactiveRemotes: Record<string, ReturnType<Remote['serialize']>> = {};
-    for (const [id, remote] of this.inactiveRemotes) {
-      inactiveRemotes[id] = remote.serialize();
-    }
     return {
       platformId: this.platformId,
       name: this.name,
       metadata: this.metadata,
       activeRemotes,
-      inactiveRemotes,
       decisionDelay: this.decisionDelay,
       clock: this.clock.serialize(t),
       votes: this.getRefereeVotes(),

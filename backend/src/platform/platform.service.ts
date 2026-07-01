@@ -8,6 +8,8 @@ import { Platform } from './models/platform';
 import { Button, Role, ClockMode, ClockState } from './models/enums';
 import { CreatePlatformDto } from './dto/create-platform.dto';
 import { RegisterRemoteDto } from './dto/register-remote.dto';
+import { ReplaceRemoteDto } from './dto/replace-remote.dto';
+import { TransferRemoteDto } from './dto/transfer-remote.dto';
 import { EnsurePlatformDto } from './dto/ensure-platform.dto';
 import { PlatformGateway } from './platform.gateway';
 
@@ -54,9 +56,9 @@ export class PlatformService {
         name: dto.name,
       });
       this.manager.addPlatform(platform);
-      platform.registerRemote('kb-left', 'left' as Role);
-      platform.registerRemote('kb-chief', 'chief' as Role);
-      platform.registerRemote('kb-right', 'right' as Role);
+      platform.registerRemote('kb-left', 'left' as Role, { active: true });
+      platform.registerRemote('kb-chief', 'chief' as Role, { active: true });
+      platform.registerRemote('kb-right', 'right' as Role, { active: true });
 
       // If a global break is in progress, sync this platform into it so it
       // can't accept votes while all other platforms are locked.
@@ -101,18 +103,28 @@ export class PlatformService {
   }
 
   registerRemote(platformId: string, dto: RegisterRemoteDto) {
-    const platform = this.getPlatform(platformId);
+    // Physical remotes always land in the global pool (physicalPool).
+    // _remoteClaims is consulted at activation time, not registration time.
+    // Idempotent: if the remote is already active on any platform, return it.
+    for (const p of this.manager.listPlatforms()) {
+      const active = p.activeRemotes.get(dto.remoteId);
+      if (active) return active.serialize();
+    }
     try {
-      const remote = platform.registerRemote(dto.remoteId, dto.role as Role, {
-        isSpare: dto.isSpare,
-        hasVibration: dto.hasVibration,
-        hasDisplay: dto.hasDisplay,
-        active: dto.active,
-      });
+      const remote = this.manager.registerPhysical(
+        platformId,
+        dto.remoteId,
+        dto.role as Role,
+        { hasVibration: dto.hasVibration, hasDisplay: dto.hasDisplay },
+      );
       return remote.serialize();
     } catch (e) {
       throw new BadRequestException((e as Error).message);
     }
+  }
+
+  getPool() {
+    return this.manager.getPool();
   }
 
   castVote(platformId: string, remoteId: string, button: Button) {
@@ -216,12 +228,63 @@ export class PlatformService {
     return platform.serialize();
   }
 
-  substituteSpare(platformId: string, targetRole: Role) {
-    const platform = this.getPlatform(platformId);
+  activateRemote(platformId: string, remoteId: string) {
+    this.getPlatform(platformId); // 404 if not found
     try {
-      platform.substituteSpare(targetRole);
+      this.manager.activateRemote(platformId, remoteId);
+      const platform = this.getPlatform(platformId);
       this.gateway.emitPlatformUpdate(platformId, platform.serialize());
       return platform.serialize();
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
+  }
+
+  deactivateRemote(platformId: string, remoteId: string) {
+    this.getPlatform(platformId); // 404 if not found
+    try {
+      this.manager.deactivateRemote(platformId, remoteId);
+      const platform = this.getPlatform(platformId);
+      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+      return platform.serialize();
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
+  }
+
+  replaceRemote(platformId: string, dto: ReplaceRemoteDto) {
+    this.getPlatform(platformId); // 404 if not found
+    try {
+      this.manager.replaceRemote(
+        platformId,
+        dto.incomingRemoteId,
+        dto.outgoingRemoteId,
+        dto.newRole as Role | undefined,
+      );
+      const platform = this.getPlatform(platformId);
+      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+      return platform.serialize();
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
+  }
+
+  transferRemote(platformId: string, remoteId: string, dto: TransferRemoteDto) {
+    try {
+      this.manager.transferRemote(remoteId, dto.targetPlatformId);
+      this.gateway.emitPlatformUpdate(
+        platformId,
+        this.getPlatform(platformId).serialize(),
+      );
+      this.gateway.emitPlatformUpdate(
+        dto.targetPlatformId,
+        this.getPlatform(dto.targetPlatformId).serialize(),
+      );
+      return {
+        fromPlatformId: platformId,
+        targetPlatformId: dto.targetPlatformId,
+        remoteId,
+      };
     } catch (e) {
       throw new BadRequestException((e as Error).message);
     }

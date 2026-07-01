@@ -3,7 +3,8 @@ import { PlatformService } from './platform.service';
 import { CreatePlatformDto } from './dto/create-platform.dto';
 import { RegisterRemoteDto } from './dto/register-remote.dto';
 import { CastVoteDto } from './dto/cast-vote.dto';
-import { SubstituteSpareDto } from './dto/substitute-spare.dto';
+import { ReplaceRemoteDto } from './dto/replace-remote.dto';
+import { TransferRemoteDto } from './dto/transfer-remote.dto';
 import { StartGlobalBreakDto } from './dto/start-global-break.dto';
 import { EnsurePlatformDto } from './dto/ensure-platform.dto';
 
@@ -32,10 +33,15 @@ export class PlatformController {
     return this.platformService.createPlatform(dto).serialize();
   }
 
-  // Must be declared before @Get(':id') so 'break' isn't matched as an id
+  // Must be declared before @Get(':id') so 'break'/'pool' aren't matched as ids
   @Get('break')
   getGlobalBreak() {
     return this.platformService.getGlobalBreak();
+  }
+
+  @Get('pool')
+  getPool() {
+    return this.platformService.getPool();
   }
 
   @Get(':id')
@@ -72,9 +78,31 @@ export class PlatformController {
     return this.platformService.pressClockButton(id, body.remoteId);
   }
 
-  @Post(':id/substitute')
-  substituteSpare(@Param('id') id: string, @Body() dto: SubstituteSpareDto) {
-    return this.platformService.substituteSpare(id, dto.targetRole);
+  @Post(':id/remotes/:remoteId/activate')
+  activateRemote(@Param('id') id: string, @Param('remoteId') remoteId: string) {
+    return this.platformService.activateRemote(id, remoteId);
+  }
+
+  @Post(':id/remotes/:remoteId/deactivate')
+  deactivateRemote(
+    @Param('id') id: string,
+    @Param('remoteId') remoteId: string,
+  ) {
+    return this.platformService.deactivateRemote(id, remoteId);
+  }
+
+  @Post(':id/remotes/replace')
+  replaceRemote(@Param('id') id: string, @Body() dto: ReplaceRemoteDto) {
+    return this.platformService.replaceRemote(id, dto);
+  }
+
+  @Post(':id/remotes/:remoteId/transfer')
+  transferRemote(
+    @Param('id') id: string,
+    @Param('remoteId') remoteId: string,
+    @Body() dto: TransferRemoteDto,
+  ) {
+    return this.platformService.transferRemote(id, remoteId, dto);
   }
 
   @Post(':id/reset')

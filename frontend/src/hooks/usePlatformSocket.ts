@@ -47,7 +47,7 @@ export function usePlatformSocket(
       })
       .catch(console.error)
 
-    const socket = io(API)
+    const socket = io(API, { forceNew: true })
     socketRef.current = socket
 
     socket.on('connect', () => {

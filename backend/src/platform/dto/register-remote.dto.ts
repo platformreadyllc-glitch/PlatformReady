@@ -10,10 +10,6 @@ export class RegisterRemoteDto {
 
   @IsOptional()
   @IsBoolean()
-  isSpare?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
   hasVibration?: boolean;
 
   @IsOptional()
