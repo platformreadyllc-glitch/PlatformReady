@@ -1,15 +1,24 @@
-import { useEffect, useState, useCallback } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useCallback, useEffect, useState } from 'react'
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
 import { Button } from '@/components/ui/button'
 import { API } from '@/hooks/usePlatformSocket'
 import { readActivePlatforms } from '@/lib/platformHelpers'
 
 interface RemoteSerialized {
   remoteId: string
-  role: 'left' | 'right' | 'chief' | 'spare'
+  role: string
   hasVibration: boolean
   hasDisplay: boolean
-  connected: boolean
 }
 
 interface PlatformFull {
@@ -19,23 +28,182 @@ interface PlatformFull {
   inactiveRemotes: Record<string, RemoteSerialized>
 }
 
-const ROLE_ORDER: Array<RemoteSerialized['role']> = ['left', 'chief', 'right']
-
-function remoteType(remoteId: string): 'Keyboard' | 'Physical' {
-  return remoteId.startsWith('kb-') ? 'Keyboard' : 'Physical'
+interface DragData {
+  remoteId: string
+  sourcePlatformId: string
+  role: string
+  isActive: boolean
 }
 
-function hardwareLabel(r: RemoteSerialized): string {
-  const parts: string[] = []
-  if (r.hasVibration) parts.push('Haptic')
-  if (r.hasDisplay) parts.push('Display')
-  return parts.length > 0 ? parts.join(', ') : '—'
+const ROLES = ['left', 'chief', 'right'] as const
+
+const ROLE_LABEL: Record<string, string> = { left: 'L', chief: 'C', right: 'R' }
+const ROLE_COLOR: Record<string, string> = {
+  left: 'text-blue-400',
+  chief: 'text-yellow-400',
+  right: 'text-red-400',
 }
+
+function isKb(remoteId: string) {
+  return remoteId.startsWith('kb-')
+}
+
+function hwTags(r: RemoteSerialized): string {
+  const tags = [r.hasVibration ? 'haptic' : '', r.hasDisplay ? 'display' : ''].filter(Boolean)
+  return tags.length ? tags.join(' · ') : ''
+}
+
+// ── Active remote chip (draggable, lives inside a role slot) ─────────────────
+
+function ActiveRemote({ remote, platformId }: { remote: RemoteSerialized; platformId: string }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `active:${platformId}:${remote.remoteId}`,
+    data: { remoteId: remote.remoteId, sourcePlatformId: platformId, role: remote.role, isActive: true } as DragData,
+  })
+  const hw = hwTags(remote)
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      className={`flex flex-col min-w-0 flex-1 cursor-grab select-none transition-opacity ${
+        isDragging ? 'opacity-20' : ''
+      }`}
+    >
+      <span className="text-xs font-mono text-primary font-medium truncate">{remote.remoteId}</span>
+      <span className="text-xs text-secondary">
+        {isKb(remote.remoteId) ? 'keyboard' : 'physical'}
+        {hw ? ` · ${hw}` : ''}
+      </span>
+    </div>
+  )
+}
+
+// ── Role slot (droppable container) ─────────────────────────────────────────
+
+function RoleSlot({ platformId, role, remote }: { platformId: string; role: string; remote?: RemoteSerialized }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `slot:${platformId}:${role}`, data: { platformId, role } })
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border min-h-[2.75rem] transition-colors ${
+        isOver
+          ? 'border-accent bg-accent/10'
+          : remote
+            ? 'border-border bg-surface'
+            : 'border-dashed border-border'
+      }`}
+    >
+      <span className={`text-[11px] font-bold w-4 shrink-0 tabular-nums ${ROLE_COLOR[role] ?? 'text-secondary'}`}>
+        {ROLE_LABEL[role] ?? role[0]?.toUpperCase()}
+      </span>
+      {remote ? (
+        <ActiveRemote remote={remote} platformId={platformId} />
+      ) : (
+        <span className="text-xs text-secondary/60 italic">empty</span>
+      )}
+    </div>
+  )
+}
+
+// ── Platform card ────────────────────────────────────────────────────────────
+
+function PlatformRemoteCard({ platform }: { platform: PlatformFull }) {
+  const byRole = Object.fromEntries(Object.values(platform.activeRemotes).map((r) => [r.role, r]))
+  return (
+    <div className="bg-surface border border-border rounded-xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-border">
+        <span className="text-sm font-semibold text-primary">{platform.name ?? platform.platformId}</span>
+      </div>
+      <div className="flex flex-col gap-2 p-3">
+        {ROLES.map((role) => (
+          <RoleSlot key={role} platformId={platform.platformId} role={role} remote={byRole[role]} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Pool remote (draggable chip for an inactive remote) ──────────────────────
+
+function PoolRemote({ id, remote, sourcePlatformId }: { id: string; remote: RemoteSerialized; sourcePlatformId: string }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id,
+    data: { remoteId: remote.remoteId, sourcePlatformId, role: remote.role, isActive: false } as DragData,
+  })
+  const hw = hwTags(remote)
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      className={`flex flex-col gap-0.5 px-3 py-2 rounded-lg border border-border bg-background cursor-grab select-none hover:border-accent transition-colors ${
+        isDragging ? 'opacity-20' : ''
+      }`}
+    >
+      <span className="text-xs font-mono text-primary font-medium">{remote.remoteId}</span>
+      <span className="text-xs text-secondary">
+        {isKb(remote.remoteId) ? 'keyboard' : 'physical'}
+        {hw ? ` · ${hw}` : ''}
+      </span>
+    </div>
+  )
+}
+
+// ── Available remotes pool (droppable) ───────────────────────────────────────
+
+function AvailablePool({ platforms }: { platforms: PlatformFull[] }) {
+  const { setNodeRef, isOver } = useDroppable({ id: 'pool' })
+
+  const pool = platforms.flatMap((p) =>
+    Object.values(p.inactiveRemotes).map((r) => ({ ...r, sourcePlatformId: p.platformId }))
+  )
+
+  return (
+    <div>
+      <p className="text-sm font-medium text-secondary mb-3">Available Remotes</p>
+      <div
+        ref={setNodeRef}
+        className={`min-h-24 rounded-xl border-2 border-dashed p-3 flex flex-wrap gap-2 items-start content-start transition-colors ${
+          isOver ? 'border-accent bg-accent/5' : 'border-border'
+        }`}
+      >
+        {pool.length === 0 ? (
+          <span className="text-xs text-secondary self-center mx-auto py-4">
+            Drag an active remote here to bench it
+          </span>
+        ) : (
+          pool.map((r) => {
+            const id = `inactive:${r.sourcePlatformId}:${r.remoteId}`
+            return (
+              <PoolRemote key={id} id={id} remote={r} sourcePlatformId={r.sourcePlatformId} />
+            )
+          })
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Drag overlay ghost ───────────────────────────────────────────────────────
+
+function RemoteGhost({ remoteId }: { remoteId: string }) {
+  return (
+    <div className="flex flex-col gap-0.5 px-3 py-2 rounded-lg border border-accent bg-surface shadow-xl cursor-grabbing select-none pointer-events-none">
+      <span className="text-xs font-mono text-primary font-medium">{remoteId}</span>
+      <span className="text-xs text-secondary">{isKb(remoteId) ? 'keyboard' : 'physical'}</span>
+    </div>
+  )
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function RemoteManagement() {
   const [platforms, setPlatforms] = useState<PlatformFull[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [activeDrag, setActiveDrag] = useState<DragData | null>(null)
 
   const fetchPlatforms = useCallback(async () => {
     setLoading(true)
@@ -44,27 +212,21 @@ export default function RemoteManagement() {
       const configured = readActivePlatforms()
       const activePlatformIds = configured.map((_, i) => `platform-${i + 1}`)
 
-      // Ensure every configured platform exists in the backend before fetching.
-      // This mirrors what the platform display pages do on mount, so Remote
-      // Management works without requiring those pages to have been visited first.
       await Promise.all(
         configured.map((p, i) =>
           fetch(`${API}/platforms/ensure`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ platformId: `platform-${i + 1}`, name: p.name }),
-          }),
-        ),
+          })
+        )
       )
 
       const res = await fetch(`${API}/platforms`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const byId: Record<string, PlatformFull> = await res.json()
       const all = Object.values(byId)
-      const filtered = activePlatformIds.length > 0
-        ? all.filter((p) => activePlatformIds.includes(p.platformId))
-        : all
-      setPlatforms(filtered)
+      setPlatforms(activePlatformIds.length > 0 ? all.filter((p) => activePlatformIds.includes(p.platformId)) : all)
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -74,225 +236,113 @@ export default function RemoteManagement() {
 
   useEffect(() => { fetchPlatforms() }, [fetchPlatforms])
 
-  async function handleActivate(platformId: string, remoteId: string) {
-    await fetch(`${API}/platforms/${platformId}/remotes/${remoteId}/activate`, {
-      method: 'POST',
-    })
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  )
+
+  function handleDragStart(e: DragStartEvent) {
+    setActiveDrag(e.active.data.current as DragData)
+  }
+
+  async function handleDragEnd(e: DragEndEvent) {
+    setActiveDrag(null)
+    const { active, over } = e
+    if (!over) return
+
+    const drag = active.data.current as DragData
+    const overId = over.id.toString()
+
+    // Bench: drag to pool → deactivate
+    if (overId === 'pool') {
+      if (!drag.isActive) return
+      await fetch(`${API}/platforms/${drag.sourcePlatformId}/remotes/${drag.remoteId}/deactivate`, {
+        method: 'POST',
+      })
+      await fetchPlatforms()
+      return
+    }
+
+    // Activate/replace: drag to role slot
+    if (!overId.startsWith('slot:')) return
+    const [, targetPlatformId, targetRole] = overId.split(':')
+
+    // Role must match
+    if (drag.role !== targetRole) return
+
+    // Keyboard remotes can only go back to their own platform
+    if (isKb(drag.remoteId) && drag.sourcePlatformId !== targetPlatformId) return
+
+    const targetPlatform = platforms.find((p) => p.platformId === targetPlatformId)
+    const occupant = targetPlatform
+      ? Object.values(targetPlatform.activeRemotes).find((r) => r.role === targetRole)
+      : undefined
+
+    // No-op: dropping active remote onto its own current slot
+    if (drag.isActive && drag.sourcePlatformId === targetPlatformId && occupant?.remoteId === drag.remoteId) return
+
+    // Transfer to target platform if the remote isn't already there
+    let effectivePlatformId = drag.sourcePlatformId
+    if (drag.sourcePlatformId !== targetPlatformId) {
+      const r = await fetch(`${API}/platforms/${drag.sourcePlatformId}/remotes/${drag.remoteId}/transfer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetPlatformId }),
+      })
+      if (!r.ok) { await fetchPlatforms(); return }
+      effectivePlatformId = targetPlatformId
+    }
+
+    // Activate or replace
+    if (occupant) {
+      await fetch(`${API}/platforms/${effectivePlatformId}/remotes/replace`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ incomingRemoteId: drag.remoteId, outgoingRemoteId: occupant.remoteId }),
+      })
+    } else {
+      await fetch(`${API}/platforms/${effectivePlatformId}/remotes/${drag.remoteId}/activate`, {
+        method: 'POST',
+      })
+    }
+
     await fetchPlatforms()
   }
 
-  async function handleDeactivate(platformId: string, remoteId: string) {
-    await fetch(`${API}/platforms/${platformId}/remotes/${remoteId}/deactivate`, {
-      method: 'POST',
-    })
-    await fetchPlatforms()
-  }
-
-  async function handleReplace(
-    platformId: string,
-    incomingRemoteId: string,
-    outgoingRemoteId: string,
-  ) {
-    await fetch(`${API}/platforms/${platformId}/remotes/replace`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ incomingRemoteId, outgoingRemoteId }),
-    })
-    await fetchPlatforms()
-  }
-
-  async function handleTransfer(fromPlatformId: string, remoteId: string, targetPlatformId: string) {
-    await fetch(`${API}/platforms/${fromPlatformId}/remotes/${remoteId}/transfer`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetPlatformId }),
-    })
-    await fetchPlatforms()
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64 text-secondary">
-        Loading…
-      </div>
-    )
+  if (loading && platforms.length === 0) {
+    return <div className="flex items-center justify-center h-64 text-secondary">Loading…</div>
   }
 
   if (error) {
-    return (
-      <div className="flex items-center justify-center h-64 text-destructive">
-        Error: {error}
-      </div>
-    )
-  }
-
-  if (platforms.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64 text-secondary">
-        No platforms configured — go to Meet Setup first.
-      </div>
-    )
+    return <div className="flex items-center justify-center h-64 text-destructive">Error: {error}</div>
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-primary">Remote Management</h1>
-        <Button variant="outline" size="sm" onClick={fetchPlatforms}>
-          Refresh
-        </Button>
+    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <div className="flex flex-col gap-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold text-primary">Remote Management</h1>
+          <Button variant="outline" size="sm" onClick={fetchPlatforms} disabled={loading}>
+            Refresh
+          </Button>
+        </div>
+
+        {platforms.length === 0 ? (
+          <p className="text-secondary text-sm">No platforms configured — go to Meet Setup first.</p>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {platforms.map((p) => (
+                <PlatformRemoteCard key={p.platformId} platform={p} />
+              ))}
+            </div>
+            <AvailablePool platforms={platforms} />
+          </>
+        )}
       </div>
 
-      {platforms.map((platform) => {
-        const activeList = ROLE_ORDER.flatMap((role) =>
-          Object.values(platform.activeRemotes).filter((r) => r.role === role),
-        ).concat(
-          Object.values(platform.activeRemotes).filter(
-            (r) => !ROLE_ORDER.includes(r.role),
-          ),
-        )
-        const inactiveList = Object.values(platform.inactiveRemotes)
-
-        return (
-          <Card key={platform.platformId}>
-            <CardHeader>
-              <CardTitle>{platform.name ?? platform.platformId}</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-6">
-              {/* Active remotes */}
-              <div>
-                <h2 className="text-sm font-semibold uppercase tracking-widest text-secondary mb-2">
-                  Active
-                </h2>
-                {activeList.length === 0 ? (
-                  <p className="text-secondary text-sm">No active remotes.</p>
-                ) : (
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-secondary border-b border-border">
-                        <th className="pb-2 pr-4 font-medium">Role</th>
-                        <th className="pb-2 pr-4 font-medium">Remote ID</th>
-                        <th className="pb-2 pr-4 font-medium">Type</th>
-                        <th className="pb-2 font-medium">Hardware</th>
-                        <th className="pb-2" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {activeList.map((r) => (
-                        <tr key={r.remoteId} className="border-b border-border last:border-0">
-                          <td className="py-2 pr-4 capitalize text-primary">{r.role}</td>
-                          <td className="py-2 pr-4 font-mono text-primary">{r.remoteId}</td>
-                          <td className="py-2 pr-4 text-secondary">{remoteType(r.remoteId)}</td>
-                          <td className="py-2 text-secondary">{hardwareLabel(r)}</td>
-                          <td className="py-2 pl-4 text-right">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleDeactivate(platform.platformId, r.remoteId)}
-                            >
-                              Bench
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-
-              {/* Inactive remotes */}
-              <div>
-                <h2 className="text-sm font-semibold uppercase tracking-widest text-secondary mb-2">
-                  Inactive
-                </h2>
-                {inactiveList.length === 0 ? (
-                  <p className="text-secondary text-sm">No inactive remotes.</p>
-                ) : (
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-secondary border-b border-border">
-                        <th className="pb-2 pr-4 font-medium">Remote ID</th>
-                        <th className="pb-2 pr-4 font-medium">Type</th>
-                        <th className="pb-2 pr-4 font-medium">Hardware</th>
-                        <th className="pb-2 font-medium">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {inactiveList.map((incoming) => {
-                        const activeCount = activeList.length
-                        const hasOpenSlot = activeCount < 3
-                        const otherPlatforms = platforms.filter(
-                          (p) => p.platformId !== platform.platformId,
-                        )
-
-                        return (
-                          <tr key={incoming.remoteId} className="border-b border-border last:border-0">
-                            <td className="py-2 pr-4 font-mono text-primary">{incoming.remoteId}</td>
-                            <td className="py-2 pr-4 text-secondary">{remoteType(incoming.remoteId)}</td>
-                            <td className="py-2 pr-4 text-secondary">{hardwareLabel(incoming)}</td>
-                            <td className="py-2">
-                              <div className="flex flex-wrap gap-2">
-                                {hasOpenSlot ? (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() =>
-                                      handleActivate(platform.platformId, incoming.remoteId)
-                                    }
-                                  >
-                                    Activate
-                                  </Button>
-                                ) : (() => {
-                                  const outgoing = activeList.find((a) => a.role === incoming.role)
-                                  return outgoing ? (
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() =>
-                                        handleReplace(
-                                          platform.platformId,
-                                          incoming.remoteId,
-                                          outgoing.remoteId,
-                                        )
-                                      }
-                                    >
-                                      Replace {incoming.role}
-                                    </Button>
-                                  ) : (
-                                    <span className="text-secondary text-sm">
-                                      No active {incoming.role} to replace
-                                    </span>
-                                  )
-                                })()}
-                                {otherPlatforms.map((target) => (
-                                  <Button
-                                    key={target.platformId}
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() =>
-                                      handleTransfer(
-                                        platform.platformId,
-                                        incoming.remoteId,
-                                        target.platformId,
-                                      )
-                                    }
-                                  >
-                                    Move to {target.name ?? target.platformId}
-                                  </Button>
-                                ))}
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )
-      })}
-    </div>
+      <DragOverlay dropAnimation={null}>
+        {activeDrag ? <RemoteGhost remoteId={activeDrag.remoteId} /> : null}
+      </DragOverlay>
+    </DndContext>
   )
 }
