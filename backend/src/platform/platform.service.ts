@@ -56,7 +56,7 @@ export class PlatformService {
         name: dto.name,
       });
       this.manager.addPlatform(platform);
-      platform.registerRemote('kb-left',  'left'  as Role, { active: true });
+      platform.registerRemote('kb-left', 'left' as Role, { active: true });
       platform.registerRemote('kb-chief', 'chief' as Role, { active: true });
       platform.registerRemote('kb-right', 'right' as Role, { active: true });
 
@@ -272,12 +272,19 @@ export class PlatformService {
   transferRemote(platformId: string, remoteId: string, dto: TransferRemoteDto) {
     try {
       this.manager.transferRemote(remoteId, dto.targetPlatformId);
-      this.gateway.emitPlatformUpdate(platformId, this.getPlatform(platformId).serialize());
+      this.gateway.emitPlatformUpdate(
+        platformId,
+        this.getPlatform(platformId).serialize(),
+      );
       this.gateway.emitPlatformUpdate(
         dto.targetPlatformId,
         this.getPlatform(dto.targetPlatformId).serialize(),
       );
-      return { fromPlatformId: platformId, targetPlatformId: dto.targetPlatformId, remoteId };
+      return {
+        fromPlatformId: platformId,
+        targetPlatformId: dto.targetPlatformId,
+        remoteId,
+      };
     } catch (e) {
       throw new BadRequestException((e as Error).message);
     }

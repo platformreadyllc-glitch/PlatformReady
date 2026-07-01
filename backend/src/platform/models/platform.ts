@@ -89,7 +89,9 @@ export class Platform {
     if (active && role !== 'spare') {
       for (const remote of this.activeRemotes.values()) {
         if (remote.role === role) {
-          throw new Error(`Role ${role} is already assigned to an active remote`);
+          throw new Error(
+            `Role ${role} is already assigned to an active remote`,
+          );
         }
       }
     }
@@ -114,7 +116,9 @@ export class Platform {
 
   addRemote(remote: Remote): void {
     if (this.allRemotes().size >= MAX_TOTAL_REMOTES) {
-      throw new Error(`Platform ${this.platformId} already has ${MAX_TOTAL_REMOTES} remotes`);
+      throw new Error(
+        `Platform ${this.platformId} already has ${MAX_TOTAL_REMOTES} remotes`,
+      );
     }
     remote.platformId = this.platformId;
     this.inactiveRemotes.set(remote.remoteId, remote);

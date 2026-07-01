@@ -273,7 +273,9 @@ describe('Platform', () => {
     for (let i = 0; i < 10; i++) {
       platform.registerRemote(`r-${i}`, 'spare');
     }
-    expect(() => platform.registerRemote('extra', 'spare')).toThrow('already has 10 remotes');
+    expect(() => platform.registerRemote('extra', 'spare')).toThrow(
+      'already has 10 remotes',
+    );
   });
 
   it('enforces max 3 active remotes on registration', () => {
@@ -473,14 +475,18 @@ describe('Platform', () => {
     platform.registerRemote('left-1', 'left', { active: true });
     platform.registerRemote('right-1', 'right', { active: true });
     platform.registerRemote('chief-1', 'chief', { active: true });
-    expect(() => platform.swapRemotes('left-1', 'right-1')).toThrow('Inactive remote');
+    expect(() => platform.swapRemotes('left-1', 'right-1')).toThrow(
+      'Inactive remote',
+    );
   });
 
   it('swapRemotes throws if outgoing remote is not active', () => {
     const platform = new Platform({ platformId: 'p20' });
     platform.registerRemote('left-1', 'left', { active: true });
     platform.registerRemote('phys-1', 'right', { active: false });
-    expect(() => platform.swapRemotes('phys-1', 'missing')).toThrow('Active remote');
+    expect(() => platform.swapRemotes('phys-1', 'missing')).toThrow(
+      'Active remote',
+    );
   });
 
   it('swapRemotes throws for invalid newRole', () => {

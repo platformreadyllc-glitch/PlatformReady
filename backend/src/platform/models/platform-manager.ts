@@ -110,7 +110,9 @@ export class PlatformManager {
     const platform = this.getPlatform(platformId);
     const remote = platform.activeRemotes.get(remoteId);
     if (!remote) {
-      throw new Error(`Active remote ${remoteId} not found on platform ${platformId}`);
+      throw new Error(
+        `Active remote ${remoteId} not found on platform ${platformId}`,
+      );
     }
     platform.activeRemotes.delete(remoteId);
     if (this.isKb(remoteId)) {
@@ -167,7 +169,10 @@ export class PlatformManager {
     }
     for (const platform of this._platforms.values()) {
       for (const remote of platform.inactiveRemotes.values()) {
-        entries.push({ ...remote.serialize(), sourcePlatformId: platform.platformId });
+        entries.push({
+          ...remote.serialize(),
+          sourcePlatformId: platform.platformId,
+        });
       }
     }
     return entries;
