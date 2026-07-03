@@ -19,6 +19,7 @@ function makeLc(): jest.Mocked<LiftingCastService> {
   return {
     notifyLights: jest.fn().mockResolvedValue(undefined),
     notifyNextAttempt: jest.fn().mockResolvedValue(undefined),
+    notifySetClock: jest.fn().mockResolvedValue(undefined),
     notifyClockStart: jest.fn().mockResolvedValue(undefined),
     notifyClockReset: jest.fn().mockResolvedValue(undefined),
   } as unknown as jest.Mocked<LiftingCastService>;

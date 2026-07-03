@@ -105,6 +105,24 @@ export class LiftingCastService {
     await this.post(baseUrl, 'next_attempt', { password });
   }
 
+  async notifySetClock(
+    internalPlatformId: string,
+    durationMs: number,
+  ): Promise<void> {
+    if (!this.hasSession(internalPlatformId)) {
+      console.warn(
+        `[LC] no session for ${internalPlatformId} — set clock skipped`,
+      );
+      return;
+    }
+    const { baseUrl, password } = this.getSessionUrl(internalPlatformId);
+    console.log(`[LC] POST clock → ${baseUrl}/clock (${durationMs}ms)`);
+    await this.post(baseUrl, 'clock', {
+      clockTimerLength: durationMs,
+      password,
+    });
+  }
+
   async notifyClockStart(internalPlatformId: string): Promise<void> {
     if (!this.hasSession(internalPlatformId)) {
       console.warn(

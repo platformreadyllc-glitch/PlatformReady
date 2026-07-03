@@ -336,12 +336,22 @@ export class PlatformService {
       this.gateway.emitPlatformUpdate(platformId, platform.serialize());
       this.scheduleBreakReset(platformId, durationSeconds);
       this.startClockTick(platformId);
-      this.liftingCast.notifyClockStart(platformId).catch((e: unknown) => {
-        console.error(
-          '[LC] clock start notification failed',
-          (e as Error).message,
-        );
-      });
+      this.liftingCast
+        .notifySetClock(platformId, durationSeconds * 1000)
+        .then(() =>
+          this.liftingCast.notifyClockStart(platformId).catch((e: unknown) => {
+            console.error(
+              '[LC] clock start notification failed',
+              (e as Error).message,
+            );
+          }),
+        )
+        .catch((e: unknown) => {
+          console.error(
+            '[LC] set clock notification failed',
+            (e as Error).message,
+          );
+        });
       return platform.serialize();
     } catch (e) {
       throw new BadRequestException((e as Error).message);
@@ -361,10 +371,20 @@ export class PlatformService {
         this.scheduleBreakReset(platform.platformId, durationSeconds);
         this.startClockTick(platform.platformId);
         this.liftingCast
-          .notifyClockStart(platform.platformId)
+          .notifySetClock(platform.platformId, durationSeconds * 1000)
+          .then(() =>
+            this.liftingCast
+              .notifyClockStart(platform.platformId)
+              .catch((e: unknown) => {
+                console.error(
+                  '[LC] clock start notification failed',
+                  (e as Error).message,
+                );
+              }),
+          )
           .catch((e: unknown) => {
             console.error(
-              '[LC] clock start notification failed',
+              '[LC] set clock notification failed',
               (e as Error).message,
             );
           });
