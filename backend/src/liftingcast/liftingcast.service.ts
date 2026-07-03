@@ -43,6 +43,14 @@ export class LiftingCastService {
     return this.sessions.has(internalPlatformId);
   }
 
+  listSessions(): Record<string, { meetId: string; lcPlatformId: string }> {
+    const result: Record<string, { meetId: string; lcPlatformId: string }> = {};
+    for (const [id, s] of this.sessions) {
+      result[id] = { meetId: s.meetId, lcPlatformId: s.lcPlatformId };
+    }
+    return result;
+  }
+
   private getSessionUrl(internalPlatformId: string): {
     baseUrl: string;
     password: string;
@@ -68,7 +76,12 @@ export class LiftingCastService {
     internalPlatformId: string,
     votes: Record<string, Button | null>,
   ): Promise<void> {
-    if (!this.hasSession(internalPlatformId)) return;
+    if (!this.hasSession(internalPlatformId)) {
+      console.warn(
+        `[LC] no session for ${internalPlatformId} — lights skipped`,
+      );
+      return;
+    }
     const { baseUrl, password } = this.getSessionUrl(internalPlatformId);
     const body = {
       left: buttonToDecision(votes['left'] as Button),
@@ -76,18 +89,31 @@ export class LiftingCastService {
       right: buttonToDecision(votes['right'] as Button),
       password,
     };
+    console.log(`[LC] POST lights → ${baseUrl}/lights`);
     await this.post(baseUrl, 'lights', body);
   }
 
   async notifyClockStart(internalPlatformId: string): Promise<void> {
-    if (!this.hasSession(internalPlatformId)) return;
+    if (!this.hasSession(internalPlatformId)) {
+      console.warn(
+        `[LC] no session for ${internalPlatformId} — clock start skipped`,
+      );
+      return;
+    }
     const { baseUrl, password } = this.getSessionUrl(internalPlatformId);
+    console.log(`[LC] POST start_clock → ${baseUrl}/start_clock`);
     await this.post(baseUrl, 'start_clock', { password });
   }
 
   async notifyClockReset(internalPlatformId: string): Promise<void> {
-    if (!this.hasSession(internalPlatformId)) return;
+    if (!this.hasSession(internalPlatformId)) {
+      console.warn(
+        `[LC] no session for ${internalPlatformId} — clock reset skipped`,
+      );
+      return;
+    }
     const { baseUrl, password } = this.getSessionUrl(internalPlatformId);
+    console.log(`[LC] POST reset_clock → ${baseUrl}/reset_clock`);
     await this.post(baseUrl, 'reset_clock', { password });
   }
 

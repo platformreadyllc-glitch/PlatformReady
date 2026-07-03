@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param } from '@nestjs/common';
 import { LiftingCastService } from './liftingcast.service';
 import { SetLightsDto } from './dto/set-lights.dto';
 import { StoreSessionDto } from './dto/store-session.dto';
@@ -31,6 +31,11 @@ export class LiftingCastController {
   @Post('reset-clock')
   resetClock() {
     return this.liftingCastService.resetClock();
+  }
+
+  @Get('sessions')
+  listSessions() {
+    return this.liftingCastService.listSessions();
   }
 
   @Post('session/:platformId')
