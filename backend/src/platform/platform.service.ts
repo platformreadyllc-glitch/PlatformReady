@@ -12,6 +12,7 @@ import { ReplaceRemoteDto } from './dto/replace-remote.dto';
 import { TransferRemoteDto } from './dto/transfer-remote.dto';
 import { EnsurePlatformDto } from './dto/ensure-platform.dto';
 import { PlatformGateway } from './platform.gateway';
+import { LiftingCastService } from '../liftingcast/liftingcast.service';
 
 @Injectable()
 export class PlatformService {
@@ -30,7 +31,10 @@ export class PlatformService {
   >();
   private globalBreak: { startedAt: number; duration: number } | null = null;
 
-  constructor(private readonly gateway: PlatformGateway) {}
+  constructor(
+    private readonly gateway: PlatformGateway,
+    private readonly liftingCast: LiftingCastService,
+  ) {}
 
   createPlatform(dto: CreatePlatformDto): Platform {
     try {
@@ -132,9 +136,31 @@ export class PlatformService {
     try {
       platform.castVote(remoteId, button);
       this.gateway.emitPlatformUpdate(platformId, platform.serialize());
-      // Fallback: auto-reset if all frontend tabs are backgrounded during the reveal window.
       if (platform.hasCompleteVoteSet()) {
+        // Fallback: auto-reset if all frontend tabs are backgrounded during the reveal window.
         this.scheduleVoteReset(platformId, platform.decisionDelay + 6);
+        // Notify LC after the decision delay — same moment the lights become visible.
+        const votes = platform.getRefereeVotes();
+        setTimeout(() => {
+          this.liftingCast
+            .notifyLights(platformId, votes)
+            .then(() =>
+              this.liftingCast
+                .notifyNextAttempt(platformId)
+                .catch((e: unknown) => {
+                  console.error(
+                    '[LC] next attempt notification failed',
+                    (e as Error).message,
+                  );
+                }),
+            )
+            .catch((e: unknown) => {
+              console.error(
+                '[LC] lights notification failed',
+                (e as Error).message,
+              );
+            });
+        }, platform.decisionDelay * 1000);
       }
       return { votes: platform.getRefereeVotes(), outcome: null };
     } catch (e) {
@@ -149,8 +175,20 @@ export class PlatformService {
       this.gateway.emitPlatformUpdate(platformId, platform.serialize());
       if (platform.clock.state() === ClockState.RUNNING) {
         this.startClockTick(platformId);
+        this.liftingCast.notifyClockStart(platformId).catch((e: unknown) => {
+          console.error(
+            '[LC] clock start notification failed',
+            (e as Error).message,
+          );
+        });
       } else {
         this.cancelClockTick(platformId);
+        this.liftingCast.notifyClockReset(platformId).catch((e: unknown) => {
+          console.error(
+            '[LC] clock reset notification failed',
+            (e as Error).message,
+          );
+        });
       }
       return platform.clock.serialize();
     } catch (e) {
@@ -298,6 +336,22 @@ export class PlatformService {
       this.gateway.emitPlatformUpdate(platformId, platform.serialize());
       this.scheduleBreakReset(platformId, durationSeconds);
       this.startClockTick(platformId);
+      this.liftingCast
+        .notifySetClock(platformId, durationSeconds)
+        .then(() =>
+          this.liftingCast.notifyClockStart(platformId).catch((e: unknown) => {
+            console.error(
+              '[LC] clock start notification failed',
+              (e as Error).message,
+            );
+          }),
+        )
+        .catch((e: unknown) => {
+          console.error(
+            '[LC] set clock notification failed',
+            (e as Error).message,
+          );
+        });
       return platform.serialize();
     } catch (e) {
       throw new BadRequestException((e as Error).message);
@@ -316,6 +370,24 @@ export class PlatformService {
       for (const platform of this.manager.listPlatforms()) {
         this.scheduleBreakReset(platform.platformId, durationSeconds);
         this.startClockTick(platform.platformId);
+        this.liftingCast
+          .notifySetClock(platform.platformId, durationSeconds)
+          .then(() =>
+            this.liftingCast
+              .notifyClockStart(platform.platformId)
+              .catch((e: unknown) => {
+                console.error(
+                  '[LC] clock start notification failed',
+                  (e as Error).message,
+                );
+              }),
+          )
+          .catch((e: unknown) => {
+            console.error(
+              '[LC] set clock notification failed',
+              (e as Error).message,
+            );
+          });
       }
       return all;
     } catch (e) {
@@ -343,6 +415,12 @@ export class PlatformService {
     }
     platform.clock.resetToActive();
     this.cancelClockTick(platformId);
+    this.liftingCast.notifyClockReset(platformId).catch((e: unknown) => {
+      console.error(
+        '[LC] clock reset notification failed',
+        (e as Error).message,
+      );
+    });
     this.gateway.emitPlatformUpdate(platformId, platform.serialize());
     return platform.serialize();
   }
@@ -357,6 +435,14 @@ export class PlatformService {
       }
       platform.clock.resetToActive();
       this.cancelClockTick(platform.platformId);
+      this.liftingCast
+        .notifyClockReset(platform.platformId)
+        .catch((e: unknown) => {
+          console.error(
+            '[LC] clock reset notification failed',
+            (e as Error).message,
+          );
+        });
     }
     const all = this.manager.serializeAll();
     this.gateway.emitGlobalUpdate(all);
@@ -374,6 +460,12 @@ export class PlatformService {
       if (platform.clock.mode === ClockMode.BREAK) {
         platform.clock.resetToActive();
         this.cancelClockTick(platformId);
+        this.liftingCast.notifyClockReset(platformId).catch((e: unknown) => {
+          console.error(
+            '[LC] clock reset notification failed',
+            (e as Error).message,
+          );
+        });
         this.gateway.emitPlatformUpdate(platformId, platform.serialize());
       }
     }, durationSeconds * 1000);

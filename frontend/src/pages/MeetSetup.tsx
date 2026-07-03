@@ -242,6 +242,22 @@ export default function MeetSetup() {
         setPlatformNames((n) => ({ ...n, [key]: data.platformName ?? '' }))
         setTestStatus((s) => ({ ...s, [key]: 'success' }))
         setTimeout(() => setTestStatus((s) => ({ ...s, [key]: 'idle' })), 5000)
+        // Store credentials on the backend so votes and clock actions can be
+        // forwarded to LC automatically. Fire-and-forget — UI is already confirmed.
+        fetch(`/api/liftingcast/session/platform-${platformIndex + 1}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            meetId: day.liftingCastMeetId,
+            lcPlatformId: platform.liftingCastPlatformId,
+            password: effectivePassword,
+          }),
+        })
+          .then((r) => {
+            if (!r.ok) r.text().then((t) => console.error('[LC] storeSession failed', r.status, t))
+            else console.log('[LC] session stored for platform', platformIndex + 1)
+          })
+          .catch((e) => console.error('[LC] storeSession network error', e))
       } else {
         setTestErrors((e) => ({ ...e, [key]: data.error ?? 'Connection failed' }))
         setTestStatus((s) => ({ ...s, [key]: 'error' }))

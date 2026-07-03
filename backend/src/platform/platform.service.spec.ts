@@ -1,5 +1,6 @@
 import { PlatformService } from './platform.service';
 import { PlatformGateway } from './platform.gateway';
+import { LiftingCastService } from '../liftingcast/liftingcast.service';
 import { ClockMode, ClockState } from './models/enums';
 
 beforeEach(() => jest.useFakeTimers());
@@ -14,10 +15,20 @@ function makeGateway(): jest.Mocked<PlatformGateway> {
   } as unknown as jest.Mocked<PlatformGateway>;
 }
 
+function makeLc(): jest.Mocked<LiftingCastService> {
+  return {
+    notifyLights: jest.fn().mockResolvedValue(undefined),
+    notifyNextAttempt: jest.fn().mockResolvedValue(undefined),
+    notifySetClock: jest.fn().mockResolvedValue(undefined),
+    notifyClockStart: jest.fn().mockResolvedValue(undefined),
+    notifyClockReset: jest.fn().mockResolvedValue(undefined),
+  } as unknown as jest.Mocked<LiftingCastService>;
+}
+
 describe('PlatformService.ensurePlatform', () => {
   it('creates a new platform with virtual remotes on first call', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     const result = svc.ensurePlatform({ platformId: 'p1', name: 'P1' });
     expect(result.platformId).toBe('p1');
     expect(result.activeRemotes['kb-left']).toBeDefined();
@@ -27,7 +38,7 @@ describe('PlatformService.ensurePlatform', () => {
 
   it('returns existing platform on second call without re-creating it', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1', name: 'P1' });
     const result = svc.ensurePlatform({ platformId: 'p1', name: 'P1' });
     expect(result.platformId).toBe('p1');
@@ -36,7 +47,7 @@ describe('PlatformService.ensurePlatform', () => {
 
   it('new platform starts in ACTIVE/IDLE when no break is in progress', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     const result = svc.ensurePlatform({ platformId: 'p1' });
     expect(result.clock.mode).toBe(ClockMode.ACTIVE);
     expect(result.clock.state).toBe(ClockState.IDLE);
@@ -44,7 +55,7 @@ describe('PlatformService.ensurePlatform', () => {
 
   it('new platform inherits an active global break', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     svc.startGlobalBreak(600);
 
@@ -57,7 +68,7 @@ describe('PlatformService.ensurePlatform', () => {
 
   it('new platform does NOT inherit a per-platform break', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     svc.startPlatformBreak('p1', 600);
 
@@ -70,7 +81,7 @@ describe('PlatformService.ensurePlatform', () => {
 describe('PlatformService.castVote', () => {
   it('emits platform:updated via gateway after a vote', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     svc.pressClockButton('p1', 'kb-chief');
     svc.castVote('p1', 'kb-left', 'white' as any);
@@ -82,7 +93,7 @@ describe('PlatformService.castVote', () => {
 
   it('returns the current votes and null outcome when not all have voted', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     svc.pressClockButton('p1', 'kb-chief');
     const result = svc.castVote('p1', 'kb-left', 'white' as any);
@@ -92,7 +103,7 @@ describe('PlatformService.castVote', () => {
 
   it('throws 400 when voting on a non-existent platform', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     expect(() => svc.castVote('missing', 'kb-left', 'white' as any)).toThrow();
   });
 });
@@ -100,7 +111,7 @@ describe('PlatformService.castVote', () => {
 describe('PlatformService.resetAttempt', () => {
   it('resets votes and emits update', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     svc.pressClockButton('p1', 'kb-chief');
     svc.castVote('p1', 'kb-left', 'white' as any);
@@ -114,7 +125,7 @@ describe('PlatformService.resetAttempt', () => {
 
   it('does not reset the clock when the platform is in BREAK mode', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     svc.startPlatformBreak('p1', 300);
     svc.resetAttempt('p1');
@@ -126,7 +137,7 @@ describe('PlatformService.resetAttempt', () => {
 describe('PlatformService.startGlobalBreak', () => {
   it('puts all existing platforms into BREAK mode and emits updates', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     svc.ensurePlatform({ platformId: 'p2' });
 
@@ -141,13 +152,13 @@ describe('PlatformService.startGlobalBreak', () => {
 describe('PlatformService.getGlobalBreak', () => {
   it('returns null when no global break is active', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     expect(svc.getGlobalBreak()).toBeNull();
   });
 
   it('returns endsAt in the future when a break is running', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     svc.startGlobalBreak(600);
 
@@ -158,7 +169,7 @@ describe('PlatformService.getGlobalBreak', () => {
 
   it('returns null and clears state once the break duration has elapsed', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     svc.startGlobalBreak(1);
 
@@ -176,7 +187,7 @@ describe('PlatformService.getGlobalBreak', () => {
 describe('PlatformService.cancelPlatformBreak', () => {
   it('resets a breaking platform to ACTIVE and emits update', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     svc.startPlatformBreak('p1', 300);
     gw.emitPlatformUpdate.mockClear();
@@ -189,7 +200,7 @@ describe('PlatformService.cancelPlatformBreak', () => {
 
   it('is a no-op when the platform is not in BREAK', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     gw.emitPlatformUpdate.mockClear();
 
@@ -201,7 +212,7 @@ describe('PlatformService.cancelPlatformBreak', () => {
 
   it('cancels the pending break reset timer so it does not fire after cancellation', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     svc.startPlatformBreak('p1', 1);
     svc.cancelPlatformBreak('p1');
@@ -216,7 +227,7 @@ describe('PlatformService.cancelPlatformBreak', () => {
 describe('PlatformService.cancelGlobalBreak', () => {
   it('resets all breaking platforms to ACTIVE and emits global update', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     svc.ensurePlatform({ platformId: 'p2' });
     svc.startGlobalBreak(600);
@@ -230,7 +241,7 @@ describe('PlatformService.cancelGlobalBreak', () => {
 
   it('cancels pending reset timers so they do not fire after cancellation', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     svc.startGlobalBreak(1);
     svc.cancelGlobalBreak();
@@ -243,7 +254,7 @@ describe('PlatformService.cancelGlobalBreak', () => {
 
   it('does not affect platforms that are not in BREAK', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     svc.ensurePlatform({ platformId: 'p2' });
     svc.startPlatformBreak('p1', 300);
@@ -259,7 +270,7 @@ describe('PlatformService.cancelGlobalBreak', () => {
 
   it('clears the global break record so late-joining platforms do not inherit it', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     svc.startGlobalBreak(600);
     svc.cancelGlobalBreak();
@@ -272,7 +283,7 @@ describe('PlatformService.cancelGlobalBreak', () => {
 describe('PlatformService.scheduleBreakReset', () => {
   it('resets clock to ACTIVE after the break duration elapses', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     svc.startPlatformBreak('p1', 1);
 
@@ -288,7 +299,7 @@ describe('PlatformService.scheduleBreakReset', () => {
 
   it('does not reset if the clock was already reset to ACTIVE before timer fires', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     svc.startPlatformBreak('p1', 1);
     svc.getPlatform('p1').clock.resetToActive();
@@ -308,7 +319,7 @@ describe('PlatformService.scheduleBreakReset', () => {
 
   it('does not throw if the platform was deleted before the timer fires', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     svc.startPlatformBreak('p1', 1);
     svc.deletePlatform('p1');
@@ -318,7 +329,7 @@ describe('PlatformService.scheduleBreakReset', () => {
 
   it('rescheduling overwrites the old timer so it only fires once', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     svc.startPlatformBreak('p1', 10);
     svc.startPlatformBreak('p1', 1);
@@ -343,7 +354,7 @@ describe('PlatformService.scheduleVoteReset', () => {
 
   it('auto-resets votes and clock after decisionDelay + 6 s', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     castAllVotes(svc, 'p1');
     expect(svc.getPlatform('p1').hasCompleteVoteSet()).toBe(true);
@@ -358,7 +369,7 @@ describe('PlatformService.scheduleVoteReset', () => {
 
   it('manual resetAttempt cancels the auto-reset', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     castAllVotes(svc, 'p1');
     svc.resetAttempt('p1');
@@ -370,7 +381,7 @@ describe('PlatformService.scheduleVoteReset', () => {
 
   it('is a no-op if votes were cleared manually before the timer fires', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     castAllVotes(svc, 'p1');
     svc.getPlatform('p1').resetVotes();
@@ -383,7 +394,7 @@ describe('PlatformService.scheduleVoteReset', () => {
 
   it('does not throw if the platform was deleted before the timer fires', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     castAllVotes(svc, 'p1');
     svc.deletePlatform('p1');
@@ -394,7 +405,7 @@ describe('PlatformService.scheduleVoteReset', () => {
 describe('PlatformService clock tick', () => {
   it('emits platform:updated every second while an active clock runs', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     svc.pressClockButton('p1', 'kb-chief');
 
@@ -409,7 +420,7 @@ describe('PlatformService clock tick', () => {
 
   it('stops ticking after resetAttempt', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     svc.pressClockButton('p1', 'kb-chief');
     svc.resetAttempt('p1');
@@ -421,7 +432,7 @@ describe('PlatformService clock tick', () => {
 
   it('emits EXPIRED state when the clock runs out and then stops ticking', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     svc.pressClockButton('p1', 'kb-chief');
 
@@ -440,7 +451,7 @@ describe('PlatformService clock tick', () => {
 
   it('ticks during a platform break and stops once the break ends', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw);
+    const svc = new PlatformService(gw, makeLc());
     svc.ensurePlatform({ platformId: 'p1' });
     svc.startPlatformBreak('p1', 5);
 
