@@ -252,7 +252,12 @@ export default function MeetSetup() {
             lcPlatformId: platform.liftingCastPlatformId,
             password: effectivePassword,
           }),
-        }).catch(() => {})
+        })
+          .then((r) => {
+            if (!r.ok) r.text().then((t) => console.error('[LC] storeSession failed', r.status, t))
+            else console.log('[LC] session stored for platform', platformIndex + 1)
+          })
+          .catch((e) => console.error('[LC] storeSession network error', e))
       } else {
         setTestErrors((e) => ({ ...e, [key]: data.error ?? 'Connection failed' }))
         setTestStatus((s) => ({ ...s, [key]: 'error' }))
