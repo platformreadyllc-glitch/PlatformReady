@@ -4,19 +4,95 @@ import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { isAxiosError } from 'axios';
 import { SetLightsDto } from './dto/set-lights.dto';
+import { StoreSessionDto } from './dto/store-session.dto';
 import { TestConnectionDto } from './dto/test-connection.dto';
+import { buttonToDecision } from '../platform/models/decisions';
+import { Button } from '../platform/models/enums';
 
 interface LiftingCastPlatform {
   _id: string;
   name: string;
 }
 
+interface LcSession {
+  meetId: string;
+  lcPlatformId: string;
+  password: string;
+}
+
 @Injectable()
 export class LiftingCastService {
+  private readonly sessions = new Map<string, LcSession>();
+
   constructor(
     private readonly http: HttpService,
     private readonly config: ConfigService,
   ) {}
+
+  // ── Session management ───────────────────────────────────────────────────────
+
+  storeSession(internalPlatformId: string, dto: StoreSessionDto): void {
+    this.sessions.set(internalPlatformId, {
+      meetId: dto.meetId,
+      lcPlatformId: dto.lcPlatformId,
+      password: dto.password,
+    });
+  }
+
+  hasSession(internalPlatformId: string): boolean {
+    return this.sessions.has(internalPlatformId);
+  }
+
+  private getSessionUrl(internalPlatformId: string): {
+    baseUrl: string;
+    password: string;
+  } {
+    const session = this.sessions.get(internalPlatformId);
+    if (!session) {
+      throw new Error(
+        `No LiftingCast session configured for platform ${internalPlatformId}`,
+      );
+    }
+    return {
+      baseUrl: `https://liftingcast.com/api/meets/${session.meetId}/platforms/${session.lcPlatformId}`,
+      password: session.password,
+    };
+  }
+
+  // ── Internal notify methods (called by PlatformService) ──────────────────────
+  // These are fire-and-forget from the caller's perspective — errors are logged
+  // but never propagated so LC failures never affect the vote/clock flow.
+
+  // votes: { left, chief, right } → maps chief→head for LC
+  async notifyLights(
+    internalPlatformId: string,
+    votes: Record<string, Button | null>,
+  ): Promise<void> {
+    if (!this.hasSession(internalPlatformId)) return;
+    const { baseUrl, password } = this.getSessionUrl(internalPlatformId);
+    const body = {
+      left: buttonToDecision(votes['left'] as Button),
+      head: buttonToDecision(votes['chief'] as Button),
+      right: buttonToDecision(votes['right'] as Button),
+      password,
+    };
+    await this.post(baseUrl, 'lights', body);
+  }
+
+  async notifyClockStart(internalPlatformId: string): Promise<void> {
+    if (!this.hasSession(internalPlatformId)) return;
+    const { baseUrl, password } = this.getSessionUrl(internalPlatformId);
+    await this.post(baseUrl, 'start_clock', { password });
+  }
+
+  async notifyClockReset(internalPlatformId: string): Promise<void> {
+    if (!this.hasSession(internalPlatformId)) return;
+    const { baseUrl, password } = this.getSessionUrl(internalPlatformId);
+    await this.post(baseUrl, 'reset_clock', { password });
+  }
+
+  // ── Manually-triggered controller methods ────────────────────────────────────
+  // These use env vars and are kept for direct/manual use via the controller.
 
   private get credentials() {
     const meetId = this.config.getOrThrow<string>('LIFTINGCAST_MEET_ID');
