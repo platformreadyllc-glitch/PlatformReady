@@ -326,6 +326,12 @@ export class PlatformService {
       this.gateway.emitPlatformUpdate(platformId, platform.serialize());
       this.scheduleBreakReset(platformId, durationSeconds);
       this.startClockTick(platformId);
+      this.liftingCast.notifyClockStart(platformId).catch((e: unknown) => {
+        console.error(
+          '[LC] clock start notification failed',
+          (e as Error).message,
+        );
+      });
       return platform.serialize();
     } catch (e) {
       throw new BadRequestException((e as Error).message);
@@ -344,6 +350,14 @@ export class PlatformService {
       for (const platform of this.manager.listPlatforms()) {
         this.scheduleBreakReset(platform.platformId, durationSeconds);
         this.startClockTick(platform.platformId);
+        this.liftingCast
+          .notifyClockStart(platform.platformId)
+          .catch((e: unknown) => {
+            console.error(
+              '[LC] clock start notification failed',
+              (e as Error).message,
+            );
+          });
       }
       return all;
     } catch (e) {
@@ -371,6 +385,12 @@ export class PlatformService {
     }
     platform.clock.resetToActive();
     this.cancelClockTick(platformId);
+    this.liftingCast.notifyClockReset(platformId).catch((e: unknown) => {
+      console.error(
+        '[LC] clock reset notification failed',
+        (e as Error).message,
+      );
+    });
     this.gateway.emitPlatformUpdate(platformId, platform.serialize());
     return platform.serialize();
   }
@@ -385,6 +405,14 @@ export class PlatformService {
       }
       platform.clock.resetToActive();
       this.cancelClockTick(platform.platformId);
+      this.liftingCast
+        .notifyClockReset(platform.platformId)
+        .catch((e: unknown) => {
+          console.error(
+            '[LC] clock reset notification failed',
+            (e as Error).message,
+          );
+        });
     }
     const all = this.manager.serializeAll();
     this.gateway.emitGlobalUpdate(all);
@@ -402,6 +430,12 @@ export class PlatformService {
       if (platform.clock.mode === ClockMode.BREAK) {
         platform.clock.resetToActive();
         this.cancelClockTick(platformId);
+        this.liftingCast.notifyClockReset(platformId).catch((e: unknown) => {
+          console.error(
+            '[LC] clock reset notification failed',
+            (e as Error).message,
+          );
+        });
         this.gateway.emitPlatformUpdate(platformId, platform.serialize());
       }
     }, durationSeconds * 1000);
