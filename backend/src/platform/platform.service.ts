@@ -144,6 +144,16 @@ export class PlatformService {
         setTimeout(() => {
           this.liftingCast
             .notifyLights(platformId, votes)
+            .then(() =>
+              this.liftingCast
+                .notifyNextAttempt(platformId)
+                .catch((e: unknown) => {
+                  console.error(
+                    '[LC] next attempt notification failed',
+                    (e as Error).message,
+                  );
+                }),
+            )
             .catch((e: unknown) => {
               console.error(
                 '[LC] lights notification failed',

@@ -93,6 +93,18 @@ export class LiftingCastService {
     await this.post(baseUrl, 'lights', body);
   }
 
+  async notifyNextAttempt(internalPlatformId: string): Promise<void> {
+    if (!this.hasSession(internalPlatformId)) {
+      console.warn(
+        `[LC] no session for ${internalPlatformId} — next attempt skipped`,
+      );
+      return;
+    }
+    const { baseUrl, password } = this.getSessionUrl(internalPlatformId);
+    console.log(`[LC] POST next_attempt → ${baseUrl}/next_attempt`);
+    await this.post(baseUrl, 'next_attempt', { password });
+  }
+
   async notifyClockStart(internalPlatformId: string): Promise<void> {
     if (!this.hasSession(internalPlatformId)) {
       console.warn(

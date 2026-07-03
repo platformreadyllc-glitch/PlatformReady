@@ -43,7 +43,13 @@ export class LiftingCastController {
     @Param('platformId') platformId: string,
     @Body() dto: StoreSessionDto,
   ) {
+    console.log(`[LC] storeSession called for ${platformId}`, {
+      meetId: dto.meetId,
+      lcPlatformId: dto.lcPlatformId,
+      hasPassword: !!dto.password,
+    });
     this.liftingCastService.storeSession(platformId, dto);
+    console.log(`[LC] session stored for ${platformId}`);
     return { ok: true };
   }
 
