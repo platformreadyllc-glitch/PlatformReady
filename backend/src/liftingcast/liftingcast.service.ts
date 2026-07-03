@@ -107,7 +107,7 @@ export class LiftingCastService {
 
   async notifySetClock(
     internalPlatformId: string,
-    durationMs: number,
+    durationSeconds: number,
   ): Promise<void> {
     if (!this.hasSession(internalPlatformId)) {
       console.warn(
@@ -116,9 +116,9 @@ export class LiftingCastService {
       return;
     }
     const { baseUrl, password } = this.getSessionUrl(internalPlatformId);
-    console.log(`[LC] POST clock → ${baseUrl}/clock (${durationMs}ms)`);
+    console.log(`[LC] POST clock → ${baseUrl}/clock (${durationSeconds}s)`);
     await this.post(baseUrl, 'clock', {
-      clockTimerLength: durationMs,
+      clockTimerLength: durationSeconds,
       password,
     });
   }

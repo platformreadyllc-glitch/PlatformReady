@@ -337,7 +337,7 @@ export class PlatformService {
       this.scheduleBreakReset(platformId, durationSeconds);
       this.startClockTick(platformId);
       this.liftingCast
-        .notifySetClock(platformId, durationSeconds * 1000)
+        .notifySetClock(platformId, durationSeconds)
         .then(() =>
           this.liftingCast.notifyClockStart(platformId).catch((e: unknown) => {
             console.error(
@@ -371,7 +371,7 @@ export class PlatformService {
         this.scheduleBreakReset(platform.platformId, durationSeconds);
         this.startClockTick(platform.platformId);
         this.liftingCast
-          .notifySetClock(platform.platformId, durationSeconds * 1000)
+          .notifySetClock(platform.platformId, durationSeconds)
           .then(() =>
             this.liftingCast
               .notifyClockStart(platform.platformId)
