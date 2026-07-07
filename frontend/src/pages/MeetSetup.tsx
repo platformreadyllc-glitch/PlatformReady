@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+
+interface LcMeet { id: string; name: string; date: string }
+interface LcPlatform { id: string; name: string }
 
 // ---------------------------------------------------------------------------
 // Data types
@@ -76,6 +80,18 @@ export default function MeetSetup() {
   const [testStatus, setTestStatus] = useState<Record<string, TestState>>({})
   const [testErrors, setTestErrors] = useState<Record<string, string>>({})
   const [platformNames, setPlatformNames] = useState<Record<string, string>>({})
+
+  // Import from LiftingCast state
+  const [importOpen, setImportOpen] = useState(false)
+  const [importSource, setImportSource] = useState<'lc' | 'relay'>('lc')
+  const [relayIp, setRelayIp] = useState('')
+  const [browsing, setBrowsing] = useState(false)
+  const [browseError, setBrowseError] = useState<string | null>(null)
+  const [lcMeets, setLcMeets] = useState<LcMeet[]>([])
+  const [selectedMeetIds, setSelectedMeetIds] = useState<string[]>([])
+  const [lcPlatforms, setLcPlatforms] = useState<LcPlatform[]>([])
+  const [loadingPlatforms, setLoadingPlatforms] = useState(false)
+  const [importing, setImporting] = useState(false)
 
   function resetAllTestStatuses() {
     setTestStatus({})
@@ -268,6 +284,109 @@ export default function MeetSetup() {
     }
   }
 
+  async function handleBrowse() {
+    setBrowsing(true)
+    setBrowseError(null)
+    setLcMeets([])
+    setSelectedMeetIds([])
+    setLcPlatforms([])
+    const relayUrl = importSource === 'relay' && relayIp ? `http://${relayIp}` : undefined
+    const params = relayUrl ? `?relayUrl=${encodeURIComponent(relayUrl)}` : ''
+    try {
+      const res = await fetch(`/api/liftingcast/browse/meets${params}`)
+      if (!res.ok) throw new Error(`Server error ${res.status}`)
+      const meets = (await res.json()) as LcMeet[]
+      setLcMeets(meets)
+      if (meets.length === 0) setBrowseError('No upcoming meets found.')
+    } catch (e) {
+      setBrowseError(e instanceof Error ? e.message : 'Failed to fetch meets.')
+    } finally {
+      setBrowsing(false)
+    }
+  }
+
+  async function fetchPlatformsForMeet(meetId: string) {
+    setLoadingPlatforms(true)
+    setBrowseError(null)
+    const relayUrl = importSource === 'relay' && relayIp ? `http://${relayIp}` : undefined
+    const params = relayUrl ? `?relayUrl=${encodeURIComponent(relayUrl)}` : ''
+    try {
+      const res = await fetch(`/api/liftingcast/browse/meets/${meetId}/platforms${params}`)
+      if (!res.ok) throw new Error(`Server error ${res.status}`)
+      setLcPlatforms((await res.json()) as LcPlatform[])
+    } catch (e) {
+      setBrowseError(e instanceof Error ? e.message : 'Failed to fetch platforms.')
+    } finally {
+      setLoadingPlatforms(false)
+    }
+  }
+
+  async function handleToggleMeet(meetId: string) {
+    const isSelected = selectedMeetIds.includes(meetId)
+    // Build next selection, maintaining the order meets appear in lcMeets (already date-sorted)
+    const nextIds = isSelected
+      ? selectedMeetIds.filter((id) => id !== meetId)
+      : lcMeets.filter((m) => selectedMeetIds.includes(m.id) || m.id === meetId).map((m) => m.id)
+    setSelectedMeetIds(nextIds)
+    // Re-fetch preview platforms only when the primary (first) selection changes
+    const prevPrimary = selectedMeetIds[0]
+    const nextPrimary = nextIds[0]
+    if (nextPrimary !== prevPrimary) {
+      setLcPlatforms([])
+      if (nextPrimary) await fetchPlatformsForMeet(nextPrimary)
+    }
+  }
+
+  async function handleImport() {
+    if (selectedMeetIds.length === 0 || lcPlatforms.length === 0) return
+    setImporting(true)
+    const relayUrl = importSource === 'relay' && relayIp ? `http://${relayIp}` : undefined
+    const params = relayUrl ? `?relayUrl=${encodeURIComponent(relayUrl)}` : ''
+    let allPlatforms: LcPlatform[][]
+    try {
+      allPlatforms = await Promise.all(
+        selectedMeetIds.map(async (id, i) => {
+          if (i === 0) return lcPlatforms // already fetched for preview
+          const res = await fetch(`/api/liftingcast/browse/meets/${id}/platforms${params}`)
+          if (!res.ok) throw new Error(`Server error ${res.status}`)
+          return (await res.json()) as LcPlatform[]
+        })
+      )
+    } catch (e) {
+      setBrowseError(e instanceof Error ? e.message : 'Failed to fetch platforms for all days.')
+      setImporting(false)
+      return
+    }
+    const primaryMeet = lcMeets.find((m) => m.id === selectedMeetIds[0])
+    const newNumDays = selectedMeetIds.length
+    const newNumPlatforms = lcPlatforms.length
+    if (primaryMeet?.name) setName(primaryMeet.name)
+    if (primaryMeet?.date) {
+      const [month, day, year] = primaryMeet.date.split('/')
+      setStartDate(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`)
+    }
+    setNumDays(newNumDays)
+    setNumPlatforms(newNumPlatforms)
+    setDays(
+      selectedMeetIds.map((meetId, di) => {
+        const dayPlatforms = allPlatforms[di] ?? allPlatforms[0]
+        return {
+          liftingCastMeetId: meetId,
+          liftingCastPassword: '',
+          platforms: Array.from({ length: newNumPlatforms }, (_, pi) => ({
+            name: dayPlatforms[pi]?.name ?? lcPlatforms[pi]?.name ?? '',
+            sessionCount: 1,
+            liftingCastPlatformId: dayPlatforms[pi]?.id ?? '',
+            active: true,
+          })),
+        }
+      })
+    )
+    resetAllTestStatuses()
+    setImporting(false)
+    setImportOpen(false)
+  }
+
   function handleSave(e: { preventDefault(): void }) {
     e.preventDefault()
     const config: MeetConfig = {
@@ -287,6 +406,120 @@ export default function MeetSetup() {
   return (
     <form onSubmit={handleSave} className="flex flex-col gap-6 max-w-2xl">
       <h1 className="text-xl font-semibold text-primary">Meet Setup</h1>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Import from LiftingCast                                            */}
+      {/* ------------------------------------------------------------------ */}
+      <Card>
+        <CardHeader className="px-6 py-4">
+          <button
+            type="button"
+            className="flex items-center gap-2 w-full text-left"
+            onClick={() => setImportOpen((o) => !o)}
+          >
+            {importOpen
+              ? <ChevronDown className="h-4 w-4 shrink-0" />
+              : <ChevronRight className="h-4 w-4 shrink-0" />}
+            <CardTitle>Import from LiftingCast</CardTitle>
+          </button>
+        </CardHeader>
+
+        {importOpen && (
+          <CardContent className="flex flex-col gap-4">
+            <div className="flex gap-6">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="import-source"
+                  checked={importSource === 'lc'}
+                  onChange={() => setImportSource('lc')}
+                />
+                <span className="text-sm">LiftingCast.com</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="import-source"
+                  checked={importSource === 'relay'}
+                  onChange={() => setImportSource('relay')}
+                />
+                <span className="text-sm">Relay Server</span>
+              </label>
+            </div>
+
+            {importSource === 'relay' && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="relay-ip">Relay server IP</Label>
+                <Input
+                  id="relay-ip"
+                  placeholder="e.g. 192.168.0.100"
+                  value={relayIp}
+                  onChange={(e) => setRelayIp(e.target.value)}
+                />
+              </div>
+            )}
+
+            <Button
+              type="button"
+              variant="default"
+              disabled={browsing || (importSource === 'relay' && !relayIp)}
+              onClick={handleBrowse}
+            >
+              {browsing ? 'Fetching meets…' : 'Browse Meets'}
+            </Button>
+
+            {browseError && <p className="text-sm text-red-500">{browseError}</p>}
+
+            {lcMeets.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Select meets (one per day, ordered by date)</Label>
+                <div className="flex flex-col gap-0.5 max-h-48 overflow-y-auto rounded-md border border-border p-2">
+                  {lcMeets.map((m) => (
+                    <label
+                      key={m.id}
+                      className="flex items-center gap-2 cursor-pointer rounded px-1 py-1 hover:bg-surface"
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-border bg-background accent-accent shrink-0"
+                        checked={selectedMeetIds.includes(m.id)}
+                        onChange={() => handleToggleMeet(m.id)}
+                      />
+                      <span className="text-sm">{m.name} ({m.date})</span>
+                    </label>
+                  ))}
+                </div>
+                {selectedMeetIds.length > 0 && (
+                  <p className="text-xs text-secondary">
+                    {selectedMeetIds.length} day{selectedMeetIds.length !== 1 ? 's' : ''} selected
+                  </p>
+                )}
+              </div>
+            )}
+
+            {loadingPlatforms && (
+              <p className="text-sm text-secondary">Loading platforms…</p>
+            )}
+
+            {lcPlatforms.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <p className="text-sm text-secondary">
+                  {lcPlatforms.length} platform{lcPlatforms.length !== 1 ? 's' : ''}:{' '}
+                  {lcPlatforms.map((p) => p.name).join(', ')}
+                </p>
+                <Button
+                  type="button"
+                  variant="default"
+                  disabled={importing}
+                  onClick={handleImport}
+                >
+                  {importing ? 'Importing…' : `Import ${selectedMeetIds.length > 1 ? `(${selectedMeetIds.length} days)` : ''}`}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        )}
+      </Card>
 
       {/* ------------------------------------------------------------------ */}
       {/* Section 1: Meet basics                                              */}
