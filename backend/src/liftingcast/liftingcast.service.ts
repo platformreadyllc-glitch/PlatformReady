@@ -187,6 +187,55 @@ export class LiftingCastService {
     await this.post(baseUrl, 'reset_clock', { password });
   }
 
+  // ── Meet/platform browse (for MeetSetup import) ─────────────────────────────
+
+  async fetchUpcomingMeets(
+    relayUrl?: string,
+  ): Promise<Array<{ id: string; name: string; date: string }>> {
+    const base = relayUrl ?? 'https://liftingcast.com';
+    const res = await firstValueFrom(
+      this.http.get<{
+        docs: Array<{ _id: string; name: string; date: string }>;
+      }>(`${base}/api/meets`),
+    );
+    const docs = res.data?.docs ?? [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return docs
+      .filter((m) => {
+        if (!m.date) return false;
+        const parts = m.date.split('/').map(Number);
+        if (parts.length !== 3) return false;
+        const [month, day, year] = parts;
+        return new Date(year, month - 1, day) >= today;
+      })
+      .sort((a, b) => {
+        const [am, ad, ay] = a.date.split('/').map(Number);
+        const [bm, bd, by] = b.date.split('/').map(Number);
+        return (
+          new Date(ay, am - 1, ad).getTime() -
+          new Date(by, bm - 1, bd).getTime()
+        );
+      })
+      .map((m) => ({ id: m._id, name: m.name, date: m.date }));
+  }
+
+  async fetchMeetPlatforms(
+    meetId: string,
+    relayUrl?: string,
+  ): Promise<Array<{ id: string; name: string }>> {
+    const base = relayUrl ?? 'https://liftingcast.com';
+    const res = await firstValueFrom(
+      this.http.get<{ docs: Array<{ _id: string; name: string }> }>(
+        `${base}/api/meets/${meetId}/platforms`,
+      ),
+    );
+    const docs = res.data?.docs ?? [];
+    return docs
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((p) => ({ id: p._id, name: p.name }));
+  }
+
   async testConnection(
     dto: TestConnectionDto,
   ): Promise<{ success: boolean; platformName?: string; error?: string }> {

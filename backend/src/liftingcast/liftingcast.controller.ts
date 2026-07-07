@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query } from '@nestjs/common';
 import { LiftingCastService } from './liftingcast.service';
 import { SetLightsDto } from './dto/set-lights.dto';
 import { StoreSessionDto } from './dto/store-session.dto';
@@ -51,6 +51,19 @@ export class LiftingCastController {
     this.liftingCastService.storeSession(platformId, dto);
     console.log(`[LC] session stored for ${platformId}`);
     return { ok: true };
+  }
+
+  @Get('browse/meets')
+  browseMeets(@Query('relayUrl') relayUrl?: string) {
+    return this.liftingCastService.fetchUpcomingMeets(relayUrl);
+  }
+
+  @Get('browse/meets/:meetId/platforms')
+  browsePlatforms(
+    @Param('meetId') meetId: string,
+    @Query('relayUrl') relayUrl?: string,
+  ) {
+    return this.liftingCastService.fetchMeetPlatforms(meetId, relayUrl);
   }
 
   @Post('test-connection')
