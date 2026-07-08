@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { dayLabel } from '@/lib/platformHelpers'
+import { dayLabel, readActiveDayState } from '@/lib/platformHelpers'
 import {
   INITIAL_CLOCK,
   INITIAL_VOTES,
@@ -50,11 +50,12 @@ export function usePlatformState(id: string | undefined, inputEnabled = true): P
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const config: StoredMeetConfig = JSON.parse(raw)
-      const platform = config.days[0]?.platforms[platformIndex]
+      const activeDayIndex = readActiveDayState().index
+      const platform = config.days[activeDayIndex]?.platforms[platformIndex]
       if (platform?.active) {
         configFound = true
         platformName = platform.name || `Platform ${numericId}`
-        dayStr = dayLabel(config.startDate, 0)
+        dayStr = dayLabel(config.startDate, activeDayIndex)
       }
     }
   } catch {
