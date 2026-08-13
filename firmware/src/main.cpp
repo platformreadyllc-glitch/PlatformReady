@@ -8,11 +8,14 @@
 #include "haptic.h"
 #include "api.h"
 #include "webconfig.h"
+#include "ota.h"
 
 static RemoteConfig cfg;
 static bool registered = false;
 static unsigned long lastRegisterAttempt = 0;
 static String lastStatus = "READY";
+static unsigned long lastOtaCheck = 0;
+static unsigned long lastActivityMs = 0;
 
 // ── WiFiManager portal with custom params for full config ────────────────────
 static void runWiFiManager(bool forcePortal) {
@@ -69,6 +72,10 @@ void setup() {
   Serial.printf("[boot] configLoad done: serial=%s host=%s platform=%s role=%s\n",
     cfg.serial.c_str(), cfg.backendHost.c_str(), cfg.platformId.c_str(), cfg.role.c_str());
 
+  // Must run before any other subsystem init: rolls back to the previous
+  // firmware if we're crash-looping after a bad OTA update.
+  otaHandleBootValidation();
+
   // Check for forced config mode: hold BTN_CONFIG at power-on
   pinMode(BTN_CONFIG, INPUT_PULLUP);
   bool forceConfig = !cfg.configured || (digitalRead(BTN_CONFIG) == LOW);
@@ -124,6 +131,16 @@ void loop() {
       lastStatus  = "READY";
       displayShowActive(cfg.platformId, cfg.role, lastStatus);
       hapticDoubleClick();
+
+      // Registering successfully is our "this firmware works" milestone —
+      // cancels any pending-update/rollback bookkeeping from a prior OTA.
+      otaMarkValid();
+
+      // Don't make freshly-booted devices wait up to OTA_CHECK_INTERVAL_MS
+      // for their first update check.
+      lastOtaCheck = millis();
+      otaCheckAndApply(cfg, true);
+      displayShowActive(cfg.platformId, cfg.role, lastStatus);
     }
   }
 
@@ -137,6 +154,7 @@ void loop() {
   for (int i = 0; i < 4; i++) {
     if (buttonRead(voteButtons[i]) != ButtonEvent::PRESSED) continue;
 
+    lastActivityMs = millis();
     hapticPulse(40);
     ApiResult r = apiCastVote(voteNames[i]);
     if (r == ApiResult::OK) {
@@ -152,6 +170,7 @@ void loop() {
   // ── Clock button (chief only) ─────────────────────────────────────────────
   if (cfg.type == RemoteType::CHIEF &&
       buttonRead(Button::CLOCK) == ButtonEvent::PRESSED) {
+    lastActivityMs = millis();
     hapticPulse(40);
     ApiResult r = apiPressClockButton();
     if (r == ApiResult::OK) {
@@ -161,6 +180,17 @@ void loop() {
       lastStatus = "ERR";
       hapticError();
     }
+    displayShowActive(cfg.platformId, cfg.role, lastStatus);
+  }
+
+  // ── Periodic OTA check ────────────────────────────────────────────────────
+  // Always checks on schedule; only applies (flash + reboot) once the device
+  // has been free of button activity for OTA_IDLE_THRESHOLD_MS, so an update
+  // never interrupts an in-progress competition action.
+  if (millis() - lastOtaCheck > OTA_CHECK_INTERVAL_MS) {
+    lastOtaCheck = millis();
+    bool idle = (millis() - lastActivityMs) > OTA_IDLE_THRESHOLD_MS;
+    otaCheckAndApply(cfg, idle);
     displayShowActive(cfg.platformId, cfg.role, lastStatus);
   }
 }
