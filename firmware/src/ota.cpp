@@ -6,9 +6,17 @@
 #include <Preferences.h>
 #include <ArduinoHttpClient.h>
 #include <ArduinoJson.h>
-#include <HTTPUpdate.h>
-#include <WiFi.h>
+#include <Update.h>
 #include "esp_ota_ops.h"
+
+// Deliberately NOT using the ESP32 core's HTTPUpdate library: its header
+// (HTTPUpdate.h) expects HTTPClient.h to already be included, but on a
+// case-insensitive filesystem (Windows) that collides with ArduinoHttpClient's
+// own identically-named-but-differently-cased HttpClient.h — the wrong file
+// silently wins and HTTPClient never gets declared, breaking the build. Using
+// Update.h directly with ArduinoHttpClient (same as api.cpp) avoids the
+// collision entirely, and as a bonus works over both WiFi and Ethernet via
+// networkNewClient(), rather than being tied to WiFiClient specifically.
 
 // Boot-attempt crash-loop protection is implemented by hand (rather than
 // relying on esp-idf's Kconfig-gated automatic rollback-on-crash-loop
@@ -45,6 +53,88 @@ static void clearPending() {
   otaPrefs.begin(OTA_NS, false);
   otaPrefs.putBool("pending", false);
   otaPrefs.end();
+}
+
+// Streams the .bin at `path` straight into the inactive OTA partition.
+// Returns true only if the full advertised Content-Length was written and
+// flashed with no error; Update.errorString() has details on failure.
+static bool downloadAndFlash(const String& path) {
+  Client* cl = networkNewClient();
+  HttpClient http(*cl, apiGetHost(), apiGetPort());
+  http.setTimeout(10000);
+
+  int err = http.get(path);
+  if (err != HTTP_SUCCESS) {
+    http.stop();
+    Serial.println("[ota] download: network error");
+    return false;
+  }
+
+  int code = http.responseStatusCode();
+  if (code < 200 || code >= 300) {
+    http.stop();
+    Serial.printf("[ota] download: http %d\n", code);
+    return false;
+  }
+
+  http.skipResponseHeaders();
+  long len = http.contentLength();
+  if (len <= 0) {
+    http.stop();
+    Serial.println("[ota] download: missing/invalid content length");
+    return false;
+  }
+
+  if (!Update.begin((size_t)len, U_FLASH)) {
+    http.stop();
+    Serial.printf("[ota] Update.begin failed: %s\n", Update.errorString());
+    return false;
+  }
+
+  uint8_t buf[1024];
+  unsigned long lastDataMs = millis();
+  const unsigned long STALL_TIMEOUT_MS = 15000;
+
+  while (Update.remaining() > 0) {
+    int avail = http.available();
+    if (avail <= 0) {
+      if (!http.connected()) break;
+      if (millis() - lastDataMs > STALL_TIMEOUT_MS) {
+        Serial.println("[ota] download stalled, aborting");
+        break;
+      }
+      delay(5);
+      continue;
+    }
+
+    size_t want = (size_t)avail;
+    if (want > sizeof(buf)) want = sizeof(buf);
+    if (want > Update.remaining()) want = Update.remaining();
+
+    int n = http.read(buf, want);
+    if (n <= 0) break;
+
+    if (Update.write(buf, (size_t)n) != (size_t)n) {
+      Serial.printf("[ota] flash write error: %s\n", Update.errorString());
+      break;
+    }
+    lastDataMs = millis();
+  }
+
+  http.stop();
+
+  if (Update.remaining() != 0) {
+    Update.abort();
+    Serial.println("[ota] download incomplete");
+    return false;
+  }
+
+  if (!Update.end(true)) {
+    Serial.printf("[ota] Update.end failed: %s\n", Update.errorString());
+    return false;
+  }
+
+  return !Update.hasError();
 }
 
 void otaHandleBootValidation() {
@@ -152,33 +242,15 @@ void otaCheckAndApply(const RemoteConfig& cfg, bool allowApply) {
 
   displayShowOtaUpdating();
 
-  // HTTPUpdate only accepts WiFiClient (not the generic Client used
-  // elsewhere via networkNewClient()) in this core version — a non-issue
-  // today since Ethernet is disabled (-DSKIP_ETHERNET). See firmware/README.md.
-  WiFiClient updateClient;
-  httpUpdate.rebootOnUpdate(false);
-  t_httpUpdate_return result =
-      httpUpdate.update(updateClient, apiGetHost(), apiGetPort(), downloadUrl, FIRMWARE_VERSION);
-
-  switch (result) {
-    case HTTP_UPDATE_OK:
-      Serial.println("[ota] update ok, rebooting");
-      displayShowOtaSuccess();
-      delay(1500);
-      ESP.restart();
-      break;
-
-    case HTTP_UPDATE_NO_UPDATES:
-      Serial.println("[ota] server reported no update (race?)");
-      clearPending();
-      break;
-
-    case HTTP_UPDATE_FAILED:
-    default:
-      Serial.printf("[ota] update failed: %s\n", httpUpdate.getLastErrorString().c_str());
-      displayShowOtaFailed(httpUpdate.getLastErrorString());
-      delay(2000);
-      clearPending();
-      break;
+  if (downloadAndFlash(downloadUrl)) {
+    Serial.println("[ota] update ok, rebooting");
+    displayShowOtaSuccess();
+    delay(1500);
+    ESP.restart();
+  } else {
+    Serial.printf("[ota] update failed: %s\n", Update.errorString());
+    displayShowOtaFailed(Update.errorString());
+    delay(2000);
+    clearPending();
   }
 }

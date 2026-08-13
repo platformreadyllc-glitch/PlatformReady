@@ -6,7 +6,7 @@ import {
   StreamableFile,
   BadRequestException,
 } from '@nestjs/common';
-import { createReadStream } from 'fs';
+import { createReadStream, statSync } from 'fs';
 import { FirmwareService, FirmwareType } from './firmware.service';
 
 @Controller('firmware')
@@ -27,6 +27,9 @@ export class FirmwareController {
     return new StreamableFile(createReadStream(filePath), {
       type: 'application/octet-stream',
       disposition: `attachment; filename="${file}"`,
+      // The device streams this straight into flash and relies on
+      // Content-Length to know when the image is complete.
+      length: statSync(filePath).size,
     });
   }
 }
