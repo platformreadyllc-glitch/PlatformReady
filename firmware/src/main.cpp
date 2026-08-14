@@ -9,6 +9,7 @@
 #include "api.h"
 #include "webconfig.h"
 #include "ota.h"
+#include "version.h"
 
 static RemoteConfig cfg;
 static bool registered = false;
@@ -58,6 +59,7 @@ void setup() {
   Serial.begin(115200);
   delay(2000);  // give serial monitor time to connect
   Serial.println("[boot] serial ready");
+  Serial.printf("[boot] firmware version %s\n", FIRMWARE_VERSION);
 
   Serial.println("[boot] hapticInit");
   hapticInit();
