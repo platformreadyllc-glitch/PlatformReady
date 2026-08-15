@@ -42,3 +42,7 @@ The OLED shows the current OTA phase: "Checking for updates", "Update in progres
 5. Devices pick it up on their next check (or immediately after their next reboot/registration).
 
 There's no CI/CD automation for this process — it's manual by design for now. Not in scope currently, but worth automating later if release frequency picks up.
+
+## Tests
+
+`pio test -e native` runs a small, fast, hardware-free unit test suite against the handful of pure-logic functions (version comparison, URL parsing) — see [test/README.md](test/README.md) for what's covered, why the rest of the firmware isn't unit tested, and one-time setup on Windows.
