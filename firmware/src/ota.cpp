@@ -1,5 +1,6 @@
 #include "ota.h"
 #include "version.h"
+#include "version_compare.h"
 #include "api.h"
 #include "network.h"
 #include "display.h"
@@ -29,25 +30,6 @@
 
 static Preferences otaPrefs;
 static const char* OTA_NS = "ota";
-
-static bool isNewer(const String& remote, const String& local) {
-  auto parse = [](const String& v, int& major, int& minor, int& patch) {
-    major = minor = patch = 0;
-    int dot1 = v.indexOf('.');
-    if (dot1 < 0) { major = v.toInt(); return; }
-    major = v.substring(0, dot1).toInt();
-    int dot2 = v.indexOf('.', dot1 + 1);
-    if (dot2 < 0) { minor = v.substring(dot1 + 1).toInt(); return; }
-    minor = v.substring(dot1 + 1, dot2).toInt();
-    patch = v.substring(dot2 + 1).toInt();
-  };
-  int rMajor, rMinor, rPatch, lMajor, lMinor, lPatch;
-  parse(remote, rMajor, rMinor, rPatch);
-  parse(local, lMajor, lMinor, lPatch);
-  if (rMajor != lMajor) return rMajor > lMajor;
-  if (rMinor != lMinor) return rMinor > lMinor;
-  return rPatch > lPatch;
-}
 
 static void clearPending() {
   otaPrefs.begin(OTA_NS, false);
@@ -221,7 +203,7 @@ void otaCheckAndApply(const RemoteConfig& cfg, bool allowApply) {
     return;
   }
 
-  if (!isNewer(remoteVersion, FIRMWARE_VERSION)) {
+  if (!otaIsNewer(remoteVersion, FIRMWARE_VERSION)) {
     Serial.println("[ota] up to date");
     return;
   }
