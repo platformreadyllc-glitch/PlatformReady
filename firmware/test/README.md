@@ -19,6 +19,8 @@ pio test -e native
 
 No board or serial connection needed — this compiles and runs on your own machine via a host C/C++ compiler, not the ESP32 toolchain.
 
+`[env:native]` only runs when explicitly targeted (`-e native`, or via `pio test`). `platformio.ini`'s `default_envs = esp32dev` keeps a bare `pio run`/`pio run --target upload` (e.g. VSCode's "Upload" button) scoped to the real board — otherwise it would also try to build the `native` environment as a normal firmware target and fail, since it isn't one.
+
 **One-time setup on Windows** (there's no system compiler by default): install PlatformIO's own packaged MinGW toolchain, isolated under `~/.platformio`, not a system-wide install:
 
 ```
