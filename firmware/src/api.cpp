@@ -1,5 +1,6 @@
 #include "api.h"
 #include "network.h"
+#include "host_port.h"
 #include <ArduinoHttpClient.h>
 #include <ArduinoJson.h>
 
@@ -8,25 +9,16 @@ static uint16_t g_port;
 static String g_platformId;
 static String g_remoteId;
 
-static void parseHostPort(const String& url) {
-  String h = url;
-  if (h.startsWith("http://"))  h = h.substring(7);
-  if (h.startsWith("https://")) h = h.substring(8);
-  int colonIdx = h.lastIndexOf(':');
-  if (colonIdx >= 0) {
-    g_port = (uint16_t)h.substring(colonIdx + 1).toInt();
-    g_host = h.substring(0, colonIdx);
-  } else {
-    g_host = h;
-    g_port = 80;
-  }
-}
-
 void apiInit(const String& backendHost, const String& platformId, const String& remoteId) {
-  parseHostPort(backendHost);
+  HostPort hp = parseHostPort(backendHost.c_str());
+  g_host = hp.host.c_str();
+  g_port = hp.port;
   g_platformId = platformId;
   g_remoteId   = remoteId;
 }
+
+const String& apiGetHost() { return g_host; }
+uint16_t apiGetPort() { return g_port; }
 
 static ApiResult post(const String& path, const String& body) {
   Client* cl = networkNewClient();

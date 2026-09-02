@@ -11,6 +11,7 @@
 #include "display.h"
 #include "haptic.h"
 #include "pins.h"
+#include "url_utils.h"
 #include <SPI.h>
 #include <Ethernet_Generic.h>
 #include <WiFi.h>
@@ -141,32 +142,6 @@ button:hover{background:#1d4ed8}
 </form></body></html>
 )html";
 
-static String urlDecode(const String& s) {
-  String out;
-  out.reserve(s.length());
-  for (int i = 0; i < (int)s.length(); i++) {
-    if (s[i] == '+') {
-      out += ' ';
-    } else if (s[i] == '%' && i + 2 < (int)s.length()) {
-      char hex[3] = { s[i + 1], s[i + 2], '\0' };
-      out += (char)strtol(hex, nullptr, 16);
-      i += 2;
-    } else {
-      out += s[i];
-    }
-  }
-  return out;
-}
-
-static String formValue(const String& body, const String& key) {
-  String search = key + "=";
-  int start = body.indexOf(search);
-  if (start < 0) return "";
-  start += search.length();
-  int end = body.indexOf('&', start);
-  return urlDecode(end < 0 ? body.substring(start) : body.substring(start, end));
-}
-
 void webConfigRunEthernet(RemoteConfig& cfg) {
   W5500Server server(80);
   server.begin();
@@ -199,11 +174,11 @@ void webConfigRunEthernet(RemoteConfig& cfg) {
     bool isSave = requestLine.startsWith("POST") && requestLine.indexOf("/save") >= 0;
 
     if (isSave) {
-      cfg.serial      = formValue(body, "serial");
-      cfg.type        = formValue(body, "type") == "chief" ? RemoteType::CHIEF : RemoteType::SIDE;
-      cfg.backendHost = formValue(body, "host");
-      cfg.platformId  = formValue(body, "platformId");
-      cfg.role        = formValue(body, "role");
+      cfg.serial      = formValue(body.c_str(), "serial").c_str();
+      cfg.type        = formValue(body.c_str(), "type") == "chief" ? RemoteType::CHIEF : RemoteType::SIDE;
+      cfg.backendHost = formValue(body.c_str(), "host").c_str();
+      cfg.platformId  = formValue(body.c_str(), "platformId").c_str();
+      cfg.role        = formValue(body.c_str(), "role").c_str();
       configSave(cfg);
 
       client.print("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n"

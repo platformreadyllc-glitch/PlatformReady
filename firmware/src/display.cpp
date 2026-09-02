@@ -81,3 +81,40 @@ void displayShowError(const String& msg) {
   u8g2.drawStr(0, 32, msg.c_str());
   u8g2.sendBuffer();
 }
+
+void displayShowOtaChecking() {
+  if (!g_displayPresent) return;
+  u8g2.clearBuffer();
+  drawHeader("UPDATE");
+  u8g2.drawStr(0, 32, "Checking for updates...");
+  u8g2.sendBuffer();
+}
+
+void displayShowOtaUpdating() {
+  if (!g_displayPresent) return;
+  u8g2.clearBuffer();
+  drawHeader("UPDATE");
+  u8g2.drawStr(0, 32, "Update in progress...");
+  u8g2.drawStr(0, 46, "Do not power off");
+  u8g2.sendBuffer();
+}
+
+void displayShowOtaFailed(const String& reason) {
+  if (!g_displayPresent) return;
+  u8g2.clearBuffer();
+  drawHeader("UPDATE");
+  u8g2.drawStr(0, 32, "Update failed");
+  // Truncate to roughly what fits on one 128px-wide line at this font.
+  String line = reason.substring(0, 21);
+  u8g2.drawStr(0, 46, line.c_str());
+  u8g2.sendBuffer();
+}
+
+void displayShowOtaSuccess() {
+  if (!g_displayPresent) return;
+  u8g2.clearBuffer();
+  drawHeader("UPDATE");
+  u8g2.drawStr(0, 32, "Update success");
+  u8g2.drawStr(0, 46, "Restarting...");
+  u8g2.sendBuffer();
+}

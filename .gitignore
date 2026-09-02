@@ -44,3 +44,6 @@ Thumbs.db
 # NestJS
 .nest/
 *.tsbuildinfo
+
+# Firmware release binaries (added manually per-release, see backend/firmware-releases/README.md)
+backend/firmware-releases/*.bin
