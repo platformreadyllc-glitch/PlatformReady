@@ -134,7 +134,7 @@ export default function DirectorView() {
 
     if (activeLcPlatforms.length === 0) {
       // No LC platforms configured — just switch the day
-      const newState = { index: di, completedIndices }
+      const newState = { index: di, completedIndices: completedDayIndices }
       writeActiveDayState(newState)
       setActiveDayIndex(di)
       return
@@ -192,7 +192,7 @@ export default function DirectorView() {
     )
 
     if (results.some((r) => r.status === 'fulfilled')) {
-      const newState = { index: di, completedIndices }
+      const newState = { index: di, completedIndices: completedDayIndices }
       writeActiveDayState(newState)
       setActiveDayIndex(di)
     }
