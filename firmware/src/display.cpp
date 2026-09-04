@@ -69,9 +69,17 @@ void displayShowActive(const String& platformId, const String& role, const Strin
   u8g2.drawStr(0, 10, hdr.c_str());
   // No divider — this is the main in-operation screen, so the reclaimed
   // space goes to a bigger, bolder status word (the primary thing a
-  // referee glances at).
+  // referee glances at). Most status words are short (READY, WHITE, ERR,
+  // CLOCK, ...) and fit the big font, but "CONNECTING" (shown once at
+  // boot) doesn't — measure and fall back to a smaller bold font rather
+  // than run text off the right edge.
   u8g2.setFont(u8g2_font_logisoso22_tf);
-  u8g2.drawStr(0, 44, status.c_str());
+  if (u8g2.getStrWidth(status.c_str()) <= 128) {
+    u8g2.drawStr(0, 44, status.c_str());
+  } else {
+    u8g2.setFont(u8g2_font_9x18B_tf);
+    u8g2.drawStr(0, 40, status.c_str());
+  }
   u8g2.sendBuffer();
 }
 
