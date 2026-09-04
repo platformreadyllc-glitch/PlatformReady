@@ -7,6 +7,7 @@ import { ReplaceRemoteDto } from './dto/replace-remote.dto';
 import { TransferRemoteDto } from './dto/transfer-remote.dto';
 import { StartGlobalBreakDto } from './dto/start-global-break.dto';
 import { EnsurePlatformDto } from './dto/ensure-platform.dto';
+import { ActivateRemoteDto } from './dto/activate-remote.dto';
 
 @Controller('platforms')
 export class PlatformController {
@@ -79,8 +80,12 @@ export class PlatformController {
   }
 
   @Post(':id/remotes/:remoteId/activate')
-  activateRemote(@Param('id') id: string, @Param('remoteId') remoteId: string) {
-    return this.platformService.activateRemote(id, remoteId);
+  activateRemote(
+    @Param('id') id: string,
+    @Param('remoteId') remoteId: string,
+    @Body() dto: ActivateRemoteDto,
+  ) {
+    return this.platformService.activateRemote(id, remoteId, dto?.role);
   }
 
   @Post(':id/remotes/:remoteId/deactivate')

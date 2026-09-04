@@ -208,6 +208,23 @@ describe('Remote', () => {
     expect(data.role).toBe('left');
     expect(data.platformId).toBe('p1');
   });
+
+  it('serialize includes hardwareType when provided, undefined otherwise', () => {
+    const withType = new Remote({
+      remoteId: 'side-1',
+      role: 'spare',
+      platformId: null,
+      hardwareType: 'side',
+    });
+    expect(withType.serialize().hardwareType).toBe('side');
+
+    const withoutType = new Remote({
+      remoteId: 'old-1',
+      role: 'left',
+      platformId: 'p1',
+    });
+    expect(withoutType.serialize().hardwareType).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -814,6 +831,129 @@ describe('PlatformManager', () => {
     expect(manager.hasPlatform('rm1')).toBe(true);
     manager.removePlatform('rm1');
     expect(manager.hasPlatform('rm1')).toBe(false);
+  });
+
+  // -------------------------------------------------------------------------
+  // registerPool / activateRemote / replaceRemote hardware-type validation
+  // -------------------------------------------------------------------------
+
+  it('registerPool creates a spare, unassigned remote with hardwareType', () => {
+    const manager = new PlatformManager();
+    const remote = manager.registerPool('phys-side-1', 'side', {
+      hasVibration: true,
+    });
+    expect(remote.role).toBe('spare');
+    expect(remote.platformId).toBeNull();
+    expect(remote.hardwareType).toBe('side');
+    expect(manager.getPool()).toContainEqual(
+      expect.objectContaining({
+        remoteId: 'phys-side-1',
+        hardwareType: 'side',
+      }),
+    );
+  });
+
+  it('registerPool is idempotent for an already-pooled remote', () => {
+    const manager = new PlatformManager();
+    const first = manager.registerPool('phys-side-2', 'side');
+    const second = manager.registerPool('phys-side-2', 'chief');
+    expect(second).toBe(first);
+    expect(second.hardwareType).toBe('side');
+  });
+
+  it('registerPool returns the existing remote if already active on a platform', () => {
+    const manager = new PlatformManager();
+    const platform = new Platform({ platformId: 'reg-active' });
+    platform.registerRemote('phys-side-3', 'left', { active: true });
+    manager.addPlatform(platform);
+
+    const result = manager.registerPool('phys-side-3', 'side');
+    expect(result.role).toBe('left');
+    expect(result.platformId).toBe('reg-active');
+  });
+
+  it('activateRemote sets role on a pooled remote', () => {
+    const manager = new PlatformManager();
+    const platform = new Platform({ platformId: 'act1' });
+    manager.addPlatform(platform);
+    manager.registerPool('side-a', 'side');
+
+    manager.activateRemote('act1', 'side-a', 'left');
+    expect(platform.activeRemotes.get('side-a')?.role).toBe('left');
+  });
+
+  it('activateRemote rejects assigning a side remote to chief', () => {
+    const manager = new PlatformManager();
+    const platform = new Platform({ platformId: 'act2' });
+    manager.addPlatform(platform);
+    manager.registerPool('side-b', 'side');
+
+    expect(() => manager.activateRemote('act2', 'side-b', 'chief')).toThrow(
+      'cannot be assigned role chief',
+    );
+  });
+
+  it('activateRemote rejects assigning a chief remote to left or right', () => {
+    const manager = new PlatformManager();
+    const platform = new Platform({ platformId: 'act3' });
+    manager.addPlatform(platform);
+    manager.registerPool('chief-a', 'chief');
+
+    expect(() => manager.activateRemote('act3', 'chief-a', 'left')).toThrow(
+      'cannot be assigned role left',
+    );
+  });
+
+  it('activateRemote rejects a role already occupied by another active remote', () => {
+    const manager = new PlatformManager();
+    const platform = new Platform({ platformId: 'act4' });
+    manager.addPlatform(platform);
+    manager.registerPool('side-c', 'side');
+    manager.registerPool('side-d', 'side');
+
+    manager.activateRemote('act4', 'side-c', 'left');
+    expect(() => manager.activateRemote('act4', 'side-d', 'left')).toThrow(
+      'already has a remote with role left',
+    );
+  });
+
+  it('activateRemote allows an old-firmware remote with no hardwareType into any role', () => {
+    const manager = new PlatformManager();
+    const platform = new Platform({ platformId: 'act5' });
+    manager.addPlatform(platform);
+    // Simulates a remote registered via the older, still-supported
+    // registerPhysical() path, which never reports hardwareType.
+    manager.registerPhysical('act5', 'legacy-1', 'spare');
+
+    expect(() =>
+      manager.activateRemote('act5', 'legacy-1', 'chief'),
+    ).not.toThrow();
+  });
+
+  it('replaceRemote rejects a hardware-incompatible newRole', () => {
+    const manager = new PlatformManager();
+    const platform = new Platform({ platformId: 'rep1' });
+    manager.addPlatform(platform);
+    manager.registerPool('side-e', 'side');
+    manager.activateRemote('rep1', 'side-e', 'left');
+    manager.registerPool('chief-b', 'chief');
+
+    expect(() =>
+      manager.replaceRemote('rep1', 'chief-b', 'side-e', 'left'),
+    ).toThrow('cannot be assigned role left');
+  });
+
+  it('replaceRemote allows a hardware-compatible newRole', () => {
+    const manager = new PlatformManager();
+    const platform = new Platform({ platformId: 'rep2' });
+    manager.addPlatform(platform);
+    manager.registerPool('side-f', 'side');
+    manager.activateRemote('rep2', 'side-f', 'left');
+    manager.registerPool('side-g', 'side');
+
+    manager.replaceRemote('rep2', 'side-g', 'side-f', 'right');
+    expect(platform.activeRemotes.get('side-g')?.role).toBe('right');
+    expect(platform.activeRemotes.has('side-f')).toBe(false);
   });
 });
 

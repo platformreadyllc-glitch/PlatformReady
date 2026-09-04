@@ -1,6 +1,7 @@
 import { Platform, PlatformSerialized } from './platform';
 import { Remote, RemoteSerialized } from './remote';
-import { Role, VALID_ROLES } from './enums';
+import { Role, VALID_ROLES, HardwareType } from './enums';
+import { isHardwareTypeCompatible } from './hardware-compat';
 
 export interface PoolEntry extends RemoteSerialized {
   sourcePlatformId: string | null;
@@ -83,24 +84,76 @@ export class PlatformManager {
     return remote;
   }
 
+  // Register a new physical remote into the unassigned pool with a
+  // hardware-type classification (side/chief) but no platform/role
+  // assignment yet — that happens later via activateRemote(). Distinct
+  // from registerPhysical() (used by the older, platform-scoped
+  // registration route still used by not-yet-reflashed devices) so that
+  // path's behavior stays untouched.
+  // Idempotent: returns the existing remote if already registered.
+  registerPool(
+    remoteId: string,
+    hardwareType: HardwareType,
+    options: { hasVibration?: boolean; hasDisplay?: boolean } = {},
+  ): Remote {
+    const poolEntry = this.physicalPool.get(remoteId);
+    if (poolEntry) return poolEntry;
+    for (const p of this._platforms.values()) {
+      const active = p.activeRemotes.get(remoteId);
+      if (active) return active;
+    }
+    const remote = new Remote({
+      remoteId,
+      role: 'spare',
+      platformId: null,
+      hardwareType,
+      ...options,
+    });
+    this.physicalPool.set(remoteId, remote);
+    return remote;
+  }
+
   // Activate a remote onto a platform's active slot.
   // kb-* remotes come from the platform's own inactiveRemotes.
-  // Physical remotes come from physicalPool.
-  activateRemote(platformId: string, remoteId: string): void {
+  // Physical remotes come from physicalPool. `role` sets/overrides the
+  // remote's role at activation time (needed since physical remotes may
+  // register with no specific role, e.g. 'spare'); if omitted, the
+  // remote's existing role is used instead.
+  activateRemote(platformId: string, remoteId: string, role?: Role): void {
     const platform = this.getPlatform(platformId);
     if (this.isKb(remoteId)) {
       platform.activateRemote(remoteId);
-    } else {
-      const remote = this.physicalPool.get(remoteId);
-      if (!remote) throw new Error(`Remote ${remoteId} not found in pool`);
-      if (platform.activeRemotes.size >= 3) {
-        throw new Error('Cannot have more than 3 active remotes');
-      }
-      this.physicalPool.delete(remoteId);
-      remote.platformId = platformId;
-      platform.activeRemotes.set(remoteId, remote);
-      this._remoteClaims.set(remoteId, platformId);
+      return;
     }
+
+    const remote = this.physicalPool.get(remoteId);
+    if (!remote) throw new Error(`Remote ${remoteId} not found in pool`);
+    if (platform.activeRemotes.size >= 3) {
+      throw new Error('Cannot have more than 3 active remotes');
+    }
+
+    const effectiveRole = role ?? remote.role;
+    if (!VALID_ROLES.has(effectiveRole) || effectiveRole === 'spare') {
+      throw new Error('role must be one of: left, right, chief');
+    }
+    if (!isHardwareTypeCompatible(remote.hardwareType, effectiveRole)) {
+      throw new Error(
+        `Remote ${remoteId} (${remote.hardwareType ?? 'unknown'} hardware) cannot be assigned role ${effectiveRole}`,
+      );
+    }
+    for (const active of platform.activeRemotes.values()) {
+      if (active.role === effectiveRole) {
+        throw new Error(
+          `Platform ${platformId} already has a remote with role ${effectiveRole}`,
+        );
+      }
+    }
+
+    remote.role = effectiveRole;
+    this.physicalPool.delete(remoteId);
+    remote.platformId = platformId;
+    platform.activeRemotes.set(remoteId, remote);
+    this._remoteClaims.set(remoteId, platformId);
   }
 
   // Deactivate a remote from a platform.
@@ -140,6 +193,14 @@ export class PlatformManager {
     if (newRole) {
       if (!VALID_ROLES.has(newRole) || newRole === 'spare') {
         throw new Error('newRole must be one of: left, right, chief');
+      }
+      if (
+        !isIncomingKb &&
+        !isHardwareTypeCompatible(incoming.hardwareType, newRole)
+      ) {
+        throw new Error(
+          `Remote ${incomingId} (${incoming.hardwareType ?? 'unknown'} hardware) cannot be assigned role ${newRole}`,
+        );
       }
       incoming.role = newRole;
     }
