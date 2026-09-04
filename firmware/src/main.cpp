@@ -10,6 +10,7 @@
 #include "webconfig.h"
 #include "ota.h"
 #include "version.h"
+#include "watchdog.h"
 
 static RemoteConfig cfg;
 static bool registered = false;
@@ -40,7 +41,12 @@ static void runWiFiManager(bool forcePortal) {
     cfg.configured = false;
   }
 
+  // autoConnect() can legitimately block for up to the 300s portal timeout
+  // above, waiting on a human — far longer than the watchdog window, and we
+  // can't feed the watchdog from inside this third-party library's own loop.
+  watchdogPause();
   wm.autoConnect("PlatformReady-Setup");
+  watchdogResume();
 
   // Save our custom params only if they weren't loaded from flash
   // (i.e. first boot or forced config mode — portal was shown).
@@ -60,6 +66,9 @@ void setup() {
   delay(2000);  // give serial monitor time to connect
   Serial.println("[boot] serial ready");
   Serial.printf("[boot] firmware version %s\n", FIRMWARE_VERSION);
+
+  // Must run before anything that could conceivably hang — see watchdog.h.
+  watchdogInit();
 
   Serial.println("[boot] hapticInit");
   hapticInit();
@@ -90,6 +99,7 @@ void setup() {
   Serial.println("[boot] networkTryEthernet");
   bool ethUp = networkTryEthernet();
   Serial.printf("[boot] ethUp=%d\n", ethUp);
+  watchdogFeed();
 
   if (ethUp) {
     if (forceConfig) {
@@ -110,10 +120,13 @@ void setup() {
 
   displayShowActive(cfg.platformId, cfg.role, "CONNECTING");
   hapticPulse(80);
+  watchdogFeed();
   Serial.println("[boot] setup done");
 }
 
 void loop() {
+  watchdogFeed();
+
   if (!networkConnected()) {
     Serial.println("[loop] no network");
     displayShowError("No network");

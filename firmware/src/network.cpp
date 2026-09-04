@@ -12,6 +12,7 @@
 #include "haptic.h"
 #include "pins.h"
 #include "url_utils.h"
+#include "watchdog.h"
 #include <SPI.h>
 #include <Ethernet_Generic.h>
 #include <WiFi.h>
@@ -143,6 +144,12 @@ button:hover{background:#1d4ed8}
 )html";
 
 void webConfigRunEthernet(RemoteConfig& cfg) {
+  // This loop waits indefinitely for a human to submit the config form — far
+  // longer than the watchdog window. Always ends in ESP.restart() on save,
+  // which reinitializes the watchdog fresh on the next boot, so no matching
+  // watchdogResume() is needed here.
+  watchdogPause();
+
   W5500Server server(80);
   server.begin();
   displayShowConfigEth(networkLocalIP());

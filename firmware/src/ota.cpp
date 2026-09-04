@@ -4,6 +4,7 @@
 #include "api.h"
 #include "network.h"
 #include "display.h"
+#include "watchdog.h"
 #include <Preferences.h>
 #include <ArduinoHttpClient.h>
 #include <ArduinoJson.h>
@@ -78,6 +79,11 @@ static bool downloadAndFlash(const String& path) {
   const unsigned long STALL_TIMEOUT_MS = 15000;
 
   while (Update.remaining() > 0) {
+    // Keeps a slow-but-progressing download from tripping the watchdog. The
+    // stall-abort below remains the primary defense against a truly stalled
+    // download — this is pure backup in case that logic somehow doesn't fire.
+    watchdogFeed();
+
     int avail = http.available();
     if (avail <= 0) {
       if (!http.connected()) break;
