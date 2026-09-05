@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <WiFiManager.h>
+#include <WiFi.h>
 #include "pins.h"
 #include "config.h"
 #include "display.h"
@@ -18,6 +19,7 @@ static unsigned long lastRegisterAttempt = 0;
 static String lastStatus = "READY";
 static unsigned long lastOtaCheck = 0;
 static unsigned long lastActivityMs = 0;
+static unsigned long disconnectedSinceMs = 0;
 
 // ── WiFiManager portal with custom params for full config ────────────────────
 static void runWiFiManager(bool forcePortal) {
@@ -124,11 +126,23 @@ void loop() {
   watchdogFeed();
 
   if (!networkConnected()) {
+    if (disconnectedSinceMs == 0) disconnectedSinceMs = millis();
     Serial.println("[loop] no network");
     displayShowError("No network");
+
+    // Active retry, WiFi only — WiFi.setAutoReconnect (network.cpp) handles
+    // most drops on its own, but this is a backstop for ones it doesn't.
+    // Ethernet's own link-based recovery is separate and already adequate.
+    if (!networkIsEthernet() && millis() - disconnectedSinceMs > 10000) {
+      Serial.println("[loop] attempting WiFi reconnect");
+      WiFi.reconnect();
+      disconnectedSinceMs = millis();  // don't hammer reconnect() every iteration
+    }
+
     delay(2000);
     return;
   }
+  disconnectedSinceMs = 0;
 
   // Register with backend once — retry every 5 s on failure
   if (!registered && millis() - lastRegisterAttempt > 5000) {

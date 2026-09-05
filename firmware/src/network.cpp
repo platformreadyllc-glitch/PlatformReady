@@ -59,6 +59,13 @@ bool networkTryEthernet() {
 
 bool networkBeginWiFi() {
   g_ethernet = false;
+  // Modem-sleep power saving is a common cause of silent ESP32 WiFi
+  // drops; setAutoReconnect tells the driver to attempt reconnection on
+  // its own when a disconnect event fires. Both are driver-level — the
+  // active retry in main.cpp's loop() is still needed as a backstop for
+  // disconnects the driver doesn't auto-recover from on its own.
+  WiFi.setSleep(false);
+  WiFi.setAutoReconnect(true);
   return true;
 }
 
