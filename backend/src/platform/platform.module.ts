@@ -4,11 +4,12 @@ import { PlatformController } from './platform.controller';
 import { RemotesController } from './remotes.controller';
 import { PlatformService } from './platform.service';
 import { PlatformGateway } from './platform.gateway';
+import { EspRemotesGateway } from './esp-remotes.gateway';
 
 @Module({
   imports: [LiftingCastModule],
   controllers: [PlatformController, RemotesController],
-  providers: [PlatformService, PlatformGateway],
+  providers: [PlatformService, PlatformGateway, EspRemotesGateway],
   exports: [PlatformService, PlatformGateway],
 })
 export class PlatformModule {}

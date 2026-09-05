@@ -1,7 +1,9 @@
 import {
+  Inject,
   Injectable,
   NotFoundException,
   BadRequestException,
+  forwardRef,
 } from '@nestjs/common';
 import { PlatformManager } from './models/platform-manager';
 import { Platform } from './models/platform';
@@ -13,6 +15,7 @@ import { ReplaceRemoteDto } from './dto/replace-remote.dto';
 import { TransferRemoteDto } from './dto/transfer-remote.dto';
 import { EnsurePlatformDto } from './dto/ensure-platform.dto';
 import { PlatformGateway } from './platform.gateway';
+import { EspRemotesGateway } from './esp-remotes.gateway';
 import { LiftingCastService } from '../liftingcast/liftingcast.service';
 import { Remote } from './models/remote';
 
@@ -36,7 +39,64 @@ export class PlatformService {
   constructor(
     private readonly gateway: PlatformGateway,
     private readonly liftingCast: LiftingCastService,
+    // Optional so the dozens of existing `new PlatformService(gw, makeLc())`
+    // test call sites keep compiling untouched - real app wiring always
+    // provides it via forwardRef (EspRemotesGateway injects PlatformService
+    // right back, a genuine two-way dependency).
+    @Inject(forwardRef(() => EspRemotesGateway))
+    private readonly espGateway?: EspRemotesGateway,
   ) {}
+
+  // Thin passthrough - used by EspRemotesGateway to validate an incoming WS
+  // connection's claimed remoteId.
+  findRemote(remoteId: string): Remote | undefined {
+    return this.manager.findRemote(remoteId);
+  }
+
+  markRemoteConnected(remoteId: string): void {
+    const remote = this.manager.findRemote(remoteId);
+    if (!remote) return;
+    remote.connect();
+    this.emitIfActive(remote);
+  }
+
+  markRemoteDisconnected(remoteId: string): void {
+    const remote = this.manager.findRemote(remoteId);
+    if (!remote) return;
+    remote.disconnect();
+    this.emitIfActive(remote);
+  }
+
+  // Remote.serialize() already includes `connected`, so re-emitting the
+  // platform this remote is active on is all a browser tab needs to show
+  // live connected-status - no new event type required. Only active remotes
+  // matter here: Platform.serialize() doesn't include inactiveRemotes at
+  // all, so a benched/pooled remote's connection state has nothing to emit.
+  private emitIfActive(remote: Remote): void {
+    if (!remote.platformId || !this.manager.hasPlatform(remote.platformId)) {
+      return;
+    }
+    const platform = this.manager.getPlatform(remote.platformId);
+    if (!platform.activeRemotes.has(remote.remoteId)) return;
+    this.gateway.emitPlatformUpdate(remote.platformId, platform.serialize());
+  }
+
+  // Single choke point for "a platform's state changed" - pushes the
+  // existing browser-facing update and, new here, the platform's current
+  // votes to every ESP32 remote active on it. Replaces the ~13 call sites
+  // that used to call gateway.emitPlatformUpdate directly, so the two
+  // broadcasts can never drift out of sync as they evolve independently.
+  private broadcastPlatformUpdate(
+    platformId: string,
+    platform: Platform,
+  ): void {
+    const serialized = platform.serialize();
+    this.gateway.emitPlatformUpdate(platformId, serialized);
+    this.espGateway?.broadcastVotes(
+      platform.activeRemotes.keys(),
+      serialized.votes,
+    );
+  }
 
   createPlatform(dto: CreatePlatformDto): Platform {
     try {
@@ -119,8 +179,8 @@ export class PlatformService {
   }
 
   registerRemote(platformId: string, dto: RegisterRemoteDto) {
-    // Physical remotes always land in the global pool (physicalPool).
-    // _remoteClaims is consulted at activation time, not registration time.
+    // Physical remotes always land in the global pool (physicalPool);
+    // platform assignment happens later via activateRemote, not here.
     const active = this.findActiveRemote(dto.remoteId);
     if (active) return active.serialize();
     try {
@@ -171,7 +231,7 @@ export class PlatformService {
     const platform = this.getPlatform(platformId);
     try {
       platform.castVote(remoteId, button);
-      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+      this.broadcastPlatformUpdate(platformId, platform);
       if (platform.hasCompleteVoteSet()) {
         // Fallback: auto-reset if all frontend tabs are backgrounded during the reveal window.
         this.scheduleVoteReset(platformId, platform.decisionDelay + 6);
@@ -208,7 +268,7 @@ export class PlatformService {
     const platform = this.getPlatform(platformId);
     try {
       platform.handleClockButton(remoteId);
-      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+      this.broadcastPlatformUpdate(platformId, platform);
       if (platform.clock.state() === ClockState.RUNNING) {
         this.startClockTick(platformId);
         this.liftingCast.notifyClockStart(platformId).catch((e: unknown) => {
@@ -240,7 +300,7 @@ export class PlatformService {
     if (platform.clock.mode !== ClockMode.BREAK) {
       platform.clock.resetToActive();
     }
-    this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+    this.broadcastPlatformUpdate(platformId, platform);
     return platform.serialize();
   }
 
@@ -256,7 +316,7 @@ export class PlatformService {
         platform.clock.resetToActive();
         this.cancelClockTick(platformId);
       }
-      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+      this.broadcastPlatformUpdate(platformId, platform);
     }, delaySeconds * 1000);
     this.voteResetTimers.set(platformId, timer);
   }
@@ -279,7 +339,7 @@ export class PlatformService {
         return;
       }
       const platform = this.manager.getPlatform(platformId);
-      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+      this.broadcastPlatformUpdate(platformId, platform);
       if (platform.clock.state() !== ClockState.RUNNING) {
         this.cancelClockTick(platformId);
       }
@@ -298,7 +358,7 @@ export class PlatformService {
   toggleAttemptChange(platformId: string) {
     const platform = this.getPlatform(platformId);
     platform.toggleAttemptChange();
-    this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+    this.broadcastPlatformUpdate(platformId, platform);
     return platform.serialize();
   }
 
@@ -307,7 +367,13 @@ export class PlatformService {
     try {
       this.manager.activateRemote(platformId, remoteId, role);
       const platform = this.getPlatform(platformId);
-      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+      this.broadcastPlatformUpdate(platformId, platform);
+      const activated = platform.activeRemotes.get(remoteId);
+      this.espGateway?.pushAssignment(
+        remoteId,
+        platformId,
+        activated?.role ?? null,
+      );
       return platform.serialize();
     } catch (e) {
       throw new BadRequestException((e as Error).message);
@@ -319,7 +385,8 @@ export class PlatformService {
     try {
       this.manager.deactivateRemote(platformId, remoteId);
       const platform = this.getPlatform(platformId);
-      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+      this.broadcastPlatformUpdate(platformId, platform);
+      this.espGateway?.pushAssignment(remoteId, null, null);
       return platform.serialize();
     } catch (e) {
       throw new BadRequestException((e as Error).message);
@@ -336,7 +403,14 @@ export class PlatformService {
         dto.newRole as Role | undefined,
       );
       const platform = this.getPlatform(platformId);
-      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+      this.broadcastPlatformUpdate(platformId, platform);
+      const incoming = platform.activeRemotes.get(dto.incomingRemoteId);
+      this.espGateway?.pushAssignment(
+        dto.incomingRemoteId,
+        platformId,
+        incoming?.role ?? null,
+      );
+      this.espGateway?.pushAssignment(dto.outgoingRemoteId, null, null);
       return platform.serialize();
     } catch (e) {
       throw new BadRequestException((e as Error).message);
@@ -346,14 +420,15 @@ export class PlatformService {
   transferRemote(platformId: string, remoteId: string, dto: TransferRemoteDto) {
     try {
       this.manager.transferRemote(remoteId, dto.targetPlatformId);
-      this.gateway.emitPlatformUpdate(
-        platformId,
-        this.getPlatform(platformId).serialize(),
-      );
-      this.gateway.emitPlatformUpdate(
+      this.broadcastPlatformUpdate(platformId, this.getPlatform(platformId));
+      this.broadcastPlatformUpdate(
         dto.targetPlatformId,
-        this.getPlatform(dto.targetPlatformId).serialize(),
+        this.getPlatform(dto.targetPlatformId),
       );
+      // transferRemote only frees the remote from its old platform (see
+      // PlatformManager.transferRemote) - it isn't activated on the target
+      // until a separate activateRemote call, so it's unassigned until then.
+      this.espGateway?.pushAssignment(remoteId, null, null);
       return {
         fromPlatformId: platformId,
         targetPlatformId: dto.targetPlatformId,
@@ -369,7 +444,7 @@ export class PlatformService {
     try {
       platform.clock.configureBreak(durationSeconds);
       platform.clock.start();
-      this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+      this.broadcastPlatformUpdate(platformId, platform);
       this.scheduleBreakReset(platformId, durationSeconds);
       this.startClockTick(platformId);
       this.liftingCast
@@ -457,7 +532,7 @@ export class PlatformService {
         (e as Error).message,
       );
     });
-    this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+    this.broadcastPlatformUpdate(platformId, platform);
     return platform.serialize();
   }
 
@@ -502,7 +577,7 @@ export class PlatformService {
             (e as Error).message,
           );
         });
-        this.gateway.emitPlatformUpdate(platformId, platform.serialize());
+        this.broadcastPlatformUpdate(platformId, platform);
       }
     }, durationSeconds * 1000);
     this.breakTimers.set(platformId, timer);

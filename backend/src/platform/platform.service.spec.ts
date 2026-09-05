@@ -1,5 +1,6 @@
 import { PlatformService } from './platform.service';
 import { PlatformGateway } from './platform.gateway';
+import { EspRemotesGateway } from './esp-remotes.gateway';
 import { LiftingCastService } from '../liftingcast/liftingcast.service';
 import { ClockMode, ClockState } from './models/enums';
 
@@ -23,6 +24,13 @@ function makeLc(): jest.Mocked<LiftingCastService> {
     notifyClockStart: jest.fn().mockResolvedValue(undefined),
     notifyClockReset: jest.fn().mockResolvedValue(undefined),
   } as unknown as jest.Mocked<LiftingCastService>;
+}
+
+function makeEspGateway(): jest.Mocked<EspRemotesGateway> {
+  return {
+    pushAssignment: jest.fn(),
+    broadcastVotes: jest.fn(),
+  } as unknown as jest.Mocked<EspRemotesGateway>;
 }
 
 describe('PlatformService.ensurePlatform', () => {
@@ -145,6 +153,90 @@ describe('PlatformService.castVote', () => {
     const gw = makeGateway();
     const svc = new PlatformService(gw, makeLc());
     expect(() => svc.castVote('missing', 'kb-left', 'white' as any)).toThrow();
+  });
+});
+
+describe('PlatformService ESP32 WS integration', () => {
+  it('findRemote passes through to the pool, active platforms, and unknown ids', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw, makeLc());
+    svc.ensurePlatform({ platformId: 'p1' });
+    expect(svc.findRemote('kb-left')?.remoteId).toBe('kb-left');
+    expect(svc.findRemote('does-not-exist')).toBeUndefined();
+  });
+
+  it('markRemoteConnected/Disconnected flip Remote.connected and re-emit for an active remote', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw, makeLc());
+    svc.ensurePlatform({ platformId: 'p1' });
+    gw.emitPlatformUpdate.mockClear();
+
+    svc.markRemoteConnected('kb-left');
+    expect(svc.findRemote('kb-left')?.connected).toBe(true);
+    expect(gw.emitPlatformUpdate).toHaveBeenCalledWith(
+      'p1',
+      expect.objectContaining({
+        activeRemotes: expect.objectContaining({
+          'kb-left': expect.objectContaining({ connected: true }),
+        }),
+      }),
+    );
+
+    gw.emitPlatformUpdate.mockClear();
+    svc.markRemoteDisconnected('kb-left');
+    expect(svc.findRemote('kb-left')?.connected).toBe(false);
+    expect(gw.emitPlatformUpdate).toHaveBeenCalled();
+  });
+
+  it('markRemoteConnected on an unknown remote is a no-op', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw, makeLc());
+    expect(() => svc.markRemoteConnected('nope')).not.toThrow();
+    expect(gw.emitPlatformUpdate).not.toHaveBeenCalled();
+  });
+
+  it('castVote broadcasts the platform votes to ESP32 remotes via espGateway', () => {
+    const gw = makeGateway();
+    const esp = makeEspGateway();
+    const svc = new PlatformService(gw, makeLc(), esp);
+    svc.ensurePlatform({ platformId: 'p1' });
+    svc.pressClockButton('p1', 'kb-chief');
+    svc.castVote('p1', 'kb-left', 'white' as any);
+    expect(esp.broadcastVotes).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ left: 'white' }),
+    );
+  });
+
+  it('works with no espGateway provided (existing test call-site shape)', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw, makeLc());
+    svc.ensurePlatform({ platformId: 'p1' });
+    svc.pressClockButton('p1', 'kb-chief');
+    expect(() => svc.castVote('p1', 'kb-left', 'white' as any)).not.toThrow();
+  });
+
+  it('activateRemote pushes the new assignment to espGateway', () => {
+    const gw = makeGateway();
+    const esp = makeEspGateway();
+    const svc = new PlatformService(gw, makeLc(), esp);
+    svc.ensurePlatform({ platformId: 'p1' });
+    svc.registerPhysicalRemote({
+      remoteId: 'side-1',
+      hardwareType: 'side',
+    } as any);
+    svc.deactivateRemote('p1', 'kb-left');
+    svc.activateRemote('p1', 'side-1', 'left' as any);
+    expect(esp.pushAssignment).toHaveBeenCalledWith('side-1', 'p1', 'left');
+  });
+
+  it('deactivateRemote pushes an unassigned (null/null) update to espGateway', () => {
+    const gw = makeGateway();
+    const esp = makeEspGateway();
+    const svc = new PlatformService(gw, makeLc(), esp);
+    svc.ensurePlatform({ platformId: 'p1' });
+    svc.deactivateRemote('p1', 'kb-left');
+    expect(esp.pushAssignment).toHaveBeenCalledWith('kb-left', null, null);
   });
 });
 
