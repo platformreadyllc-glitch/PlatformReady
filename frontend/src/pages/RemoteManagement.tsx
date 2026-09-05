@@ -73,10 +73,22 @@ function isHardwareTypeCompatible(hardwareType: HardwareType | undefined, role: 
   return role === 'left' || role === 'right' || role === 'spare'
 }
 
-function remoteLabel(entry: { remoteId: string; role: string; hardwareType?: HardwareType }): string {
+// Physical remotes: chief always shows just "chief" (chief hardware only
+// ever serves the chief role, no ambiguity). Side remotes show just "side"
+// unless currently assigned to a specific slot, in which case they show
+// "side - left"/"side - right". `isAssigned` should be false for pool
+// entries, the drag ghost, and a card while it's actively being dragged (its
+// old assignment is "in flux") — true only for a settled, in-slot remote.
+function remoteLabel(
+  entry: { remoteId: string; role: string; hardwareType?: HardwareType },
+  isAssigned: boolean,
+): string {
   if (isKb(entry.remoteId)) return 'keyboard'
-  const tag = roleTag(entry.role)
-  return entry.hardwareType ? `${entry.hardwareType} · ${tag}` : tag
+  if (!entry.hardwareType) return roleTag(entry.role) // fallback for very old, untagged remotes
+  if (entry.hardwareType === 'chief') return 'chief'
+  return isAssigned && (entry.role === 'left' || entry.role === 'right')
+    ? `side - ${entry.role}`
+    : 'side'
 }
 
 function blockedReason(role: string): string {
@@ -106,7 +118,7 @@ function ActiveRemote({ remote, platformId }: { remote: RemoteSerialized; platfo
       }`}
     >
       <span className="text-xs font-mono text-primary font-medium truncate">{remote.remoteId}</span>
-      <span className="text-xs text-secondary">{remoteLabel(remote)}</span>
+      <span className="text-xs text-secondary">{remoteLabel(remote, !isDragging)}</span>
     </div>
   )
 }
@@ -209,7 +221,7 @@ function PoolRemote({ entry }: { entry: PoolEntry }) {
       }`}
     >
       <span className="text-xs font-mono text-primary font-medium">{entry.remoteId}</span>
-      <span className="text-xs text-secondary">{remoteLabel(entry)}</span>
+      <span className="text-xs text-secondary">{remoteLabel(entry, false)}</span>
     </div>
   )
 }
@@ -244,11 +256,11 @@ function AvailablePool({ pool }: { pool: PoolEntry[] }) {
 
 // ── Drag overlay ghost ───────────────────────────────────────────────────────
 
-function RemoteGhost({ remoteId }: { remoteId: string }) {
+function RemoteGhost({ remote }: { remote: DragData }) {
   return (
     <div className="flex flex-col gap-0.5 px-3 py-2 rounded-lg border border-accent bg-surface shadow-xl cursor-grabbing select-none pointer-events-none">
-      <span className="text-xs font-mono text-primary font-medium">{remoteId}</span>
-      <span className="text-xs text-secondary">{isKb(remoteId) ? 'keyboard' : 'physical'}</span>
+      <span className="text-xs font-mono text-primary font-medium">{remote.remoteId}</span>
+      <span className="text-xs text-secondary">{remoteLabel(remote, false)}</span>
     </div>
   )
 }
@@ -415,7 +427,7 @@ export default function RemoteManagement() {
       </div>
 
       <DragOverlay dropAnimation={null}>
-        {activeDrag ? <RemoteGhost remoteId={activeDrag.remoteId} /> : null}
+        {activeDrag ? <RemoteGhost remote={activeDrag} /> : null}
       </DragOverlay>
     </DndContext>
   )
