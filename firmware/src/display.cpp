@@ -102,11 +102,13 @@ void displayShowOtaChecking() {
   u8g2.sendBuffer();
 }
 
-void displayShowOtaUpdating() {
+void displayShowOtaUpdating(int frame) {
   if (!g_displayPresent) return;
   u8g2.clearBuffer();
   drawHeader("UPDATE");
-  u8g2.drawStr(0, 32, "Update in progress...");
+  String dots;
+  for (int i = 0; i < (frame % 4); i++) dots += '.';
+  u8g2.drawStr(0, 32, ("Update in progress" + dots).c_str());
   u8g2.drawStr(0, 46, "Do not power off");
   u8g2.sendBuffer();
 }
@@ -122,11 +124,13 @@ void displayShowOtaFailed(const String& reason) {
   u8g2.sendBuffer();
 }
 
-void displayShowOtaSuccess() {
+void displayShowOtaSuccess(int frame) {
   if (!g_displayPresent) return;
   u8g2.clearBuffer();
   drawHeader("UPDATE");
   u8g2.drawStr(0, 32, "Update success");
-  u8g2.drawStr(0, 46, "Restarting...");
+  String dots;
+  for (int i = 0; i < (frame % 4); i++) dots += '.';
+  u8g2.drawStr(0, 46, ("Restarting" + dots).c_str());
   u8g2.sendBuffer();
 }

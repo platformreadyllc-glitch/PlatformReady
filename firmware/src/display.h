@@ -9,6 +9,8 @@ void displayShowError(const String& msg);
 
 // OTA update status screens (see ota.cpp).
 void displayShowOtaChecking();
-void displayShowOtaUpdating();
+// `frame` cycles a trailing "..." animation (0-3 dots) so the screen visibly
+// updates during the otherwise-silent download/restart wait.
+void displayShowOtaUpdating(int frame);
 void displayShowOtaFailed(const String& reason);
-void displayShowOtaSuccess();
+void displayShowOtaSuccess(int frame);

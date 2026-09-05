@@ -77,12 +77,23 @@ static bool downloadAndFlash(const String& path) {
   uint8_t buf[1024];
   unsigned long lastDataMs = millis();
   const unsigned long STALL_TIMEOUT_MS = 15000;
+  unsigned long lastAnimMs = millis();
+  int animFrame = 0;
+  const unsigned long ANIM_INTERVAL_MS = 400;
 
   while (Update.remaining() > 0) {
     // Keeps a slow-but-progressing download from tripping the watchdog. The
     // stall-abort below remains the primary defense against a truly stalled
     // download — this is pure backup in case that logic somehow doesn't fire.
     watchdogFeed();
+
+    // Cycles the "Update in progress..." dots so the screen visibly updates
+    // during the download — without this it looks frozen for the whole
+    // (potentially many-second) transfer even when it's working fine.
+    if (millis() - lastAnimMs > ANIM_INTERVAL_MS) {
+      lastAnimMs = millis();
+      displayShowOtaUpdating(animFrame++);
+    }
 
     int avail = http.available();
     if (avail <= 0) {
@@ -228,12 +239,16 @@ void otaCheckAndApply(const RemoteConfig& cfg, bool allowApply) {
   otaPrefs.putString("targetVersion", remoteVersion);
   otaPrefs.end();
 
-  displayShowOtaUpdating();
+  displayShowOtaUpdating(0);
 
   if (downloadAndFlash(downloadUrl)) {
     Serial.println("[ota] update ok, rebooting");
-    displayShowOtaSuccess();
-    delay(1500);
+    // Animate the "Restarting..." dots across roughly the same total delay
+    // as before, so the screen visibly updates instead of looking frozen.
+    for (int frame = 0; frame < 4; frame++) {
+      displayShowOtaSuccess(frame);
+      delay(400);
+    }
     ESP.restart();
   } else {
     Serial.printf("[ota] update failed: %s\n", Update.errorString());
