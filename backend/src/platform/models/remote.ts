@@ -1,9 +1,12 @@
-import { Role, Button } from './enums';
+import { Role, Button, HardwareType } from './enums';
 
 export interface RemoteSerialized {
   remoteId: string;
   role: Role;
-  platformId: string;
+  platformId: string | null;
+  // Undefined for remotes registered by pre-hardwareType firmware that
+  // never reported it.
+  hardwareType?: HardwareType;
   hasVibration: boolean;
   hasDisplay: boolean;
   hasClockButton: boolean;
@@ -19,7 +22,8 @@ export interface RemoteSerialized {
 export class Remote {
   remoteId: string;
   role: Role;
-  platformId: string;
+  platformId: string | null;
+  hardwareType?: HardwareType;
   hasVibration: boolean;
   hasDisplay: boolean;
   connected: boolean = false;
@@ -31,7 +35,8 @@ export class Remote {
   constructor(params: {
     remoteId: string;
     role: Role;
-    platformId: string;
+    platformId: string | null;
+    hardwareType?: HardwareType;
     hasVibration?: boolean;
     hasDisplay?: boolean;
     metadata?: Record<string, unknown>;
@@ -39,6 +44,7 @@ export class Remote {
     this.remoteId = params.remoteId;
     this.role = params.role;
     this.platformId = params.platformId;
+    this.hardwareType = params.hardwareType;
     this.hasVibration = params.hasVibration ?? false;
     this.hasDisplay = params.hasDisplay ?? false;
     this.metadata = params.metadata ?? {};
@@ -94,6 +100,7 @@ export class Remote {
       remoteId: this.remoteId,
       role: this.role,
       platformId: this.platformId,
+      hardwareType: this.hardwareType,
       hasVibration: this.hasVibration,
       hasDisplay: this.hasDisplay,
       hasClockButton: this.hasClockButton,

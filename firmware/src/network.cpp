@@ -12,6 +12,7 @@
 #include "haptic.h"
 #include "pins.h"
 #include "url_utils.h"
+#include "watchdog.h"
 #include <SPI.h>
 #include <Ethernet_Generic.h>
 #include <WiFi.h>
@@ -130,19 +131,17 @@ button:hover{background:#1d4ed8}
   </select>
 </label>
 <label>Backend URL<input name="host" required placeholder="http://192.168.1.100:3000"></label>
-<label>Platform ID<input name="platformId" required placeholder="platform-1"></label>
-<label>Role
-  <select name="role">
-    <option value="left">Left</option>
-    <option value="right">Right</option>
-    <option value="chief">Chief</option>
-  </select>
-</label>
 <button type="submit">Save &amp; Restart</button>
 </form></body></html>
 )html";
 
 void webConfigRunEthernet(RemoteConfig& cfg) {
+  // This loop waits indefinitely for a human to submit the config form — far
+  // longer than the watchdog window. Always ends in ESP.restart() on save,
+  // which reinitializes the watchdog fresh on the next boot, so no matching
+  // watchdogResume() is needed here.
+  watchdogPause();
+
   W5500Server server(80);
   server.begin();
   displayShowConfigEth(networkLocalIP());
@@ -174,11 +173,12 @@ void webConfigRunEthernet(RemoteConfig& cfg) {
     bool isSave = requestLine.startsWith("POST") && requestLine.indexOf("/save") >= 0;
 
     if (isSave) {
+      // Platform/role are assigned later via the remote management page,
+      // not at setup time — only the fixed identity fields are collected
+      // here.
       cfg.serial      = formValue(body.c_str(), "serial").c_str();
       cfg.type        = formValue(body.c_str(), "type") == "chief" ? RemoteType::CHIEF : RemoteType::SIDE;
       cfg.backendHost = formValue(body.c_str(), "host").c_str();
-      cfg.platformId  = formValue(body.c_str(), "platformId").c_str();
-      cfg.role        = formValue(body.c_str(), "role").c_str();
       configSave(cfg);
 
       client.print("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n"

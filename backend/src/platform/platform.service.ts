@@ -8,11 +8,13 @@ import { Platform } from './models/platform';
 import { Button, Role, ClockMode, ClockState } from './models/enums';
 import { CreatePlatformDto } from './dto/create-platform.dto';
 import { RegisterRemoteDto } from './dto/register-remote.dto';
+import { RegisterPhysicalRemoteDto } from './dto/register-physical-remote.dto';
 import { ReplaceRemoteDto } from './dto/replace-remote.dto';
 import { TransferRemoteDto } from './dto/transfer-remote.dto';
 import { EnsurePlatformDto } from './dto/ensure-platform.dto';
 import { PlatformGateway } from './platform.gateway';
 import { LiftingCastService } from '../liftingcast/liftingcast.service';
+import { Remote } from './models/remote';
 
 @Injectable()
 export class PlatformService {
@@ -106,14 +108,21 @@ export class PlatformService {
     return this.manager.serializeAll();
   }
 
+  // Idempotent: if the remote is already active on any platform, return it
+  // unchanged instead of re-registering. Shared by both registration paths.
+  private findActiveRemote(remoteId: string): Remote | undefined {
+    for (const p of this.manager.listPlatforms()) {
+      const active = p.activeRemotes.get(remoteId);
+      if (active) return active;
+    }
+    return undefined;
+  }
+
   registerRemote(platformId: string, dto: RegisterRemoteDto) {
     // Physical remotes always land in the global pool (physicalPool).
     // _remoteClaims is consulted at activation time, not registration time.
-    // Idempotent: if the remote is already active on any platform, return it.
-    for (const p of this.manager.listPlatforms()) {
-      const active = p.activeRemotes.get(dto.remoteId);
-      if (active) return active.serialize();
-    }
+    const active = this.findActiveRemote(dto.remoteId);
+    if (active) return active.serialize();
     try {
       const remote = this.manager.registerPhysical(
         platformId,
@@ -121,6 +130,33 @@ export class PlatformService {
         dto.role as Role,
         { hasVibration: dto.hasVibration, hasDisplay: dto.hasDisplay },
       );
+      return remote.serialize();
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
+  }
+
+  // Newer registration path: no platformId, no role — the remote always
+  // lands in the pool as 'spare' and gets assigned via the management page.
+  registerPhysicalRemote(dto: RegisterPhysicalRemoteDto) {
+    const active = this.findActiveRemote(dto.remoteId);
+    if (active) {
+      // Role/platform stay untouched (that's the whole point of the
+      // idempotent check), but refresh self-reported capabilities even for
+      // an already-assigned remote — otherwise a remote that was active
+      // before hardwareType existed would carry hardwareType: undefined
+      // forever, since nothing else ever re-derives it.
+      active.hardwareType = dto.hardwareType;
+      if (dto.hasVibration !== undefined)
+        active.hasVibration = dto.hasVibration;
+      if (dto.hasDisplay !== undefined) active.hasDisplay = dto.hasDisplay;
+      return active.serialize();
+    }
+    try {
+      const remote = this.manager.registerPool(dto.remoteId, dto.hardwareType, {
+        hasVibration: dto.hasVibration,
+        hasDisplay: dto.hasDisplay,
+      });
       return remote.serialize();
     } catch (e) {
       throw new BadRequestException((e as Error).message);
@@ -266,10 +302,10 @@ export class PlatformService {
     return platform.serialize();
   }
 
-  activateRemote(platformId: string, remoteId: string) {
+  activateRemote(platformId: string, remoteId: string, role?: Role) {
     this.getPlatform(platformId); // 404 if not found
     try {
-      this.manager.activateRemote(platformId, remoteId);
+      this.manager.activateRemote(platformId, remoteId, role);
       const platform = this.getPlatform(platformId);
       this.gateway.emitPlatformUpdate(platformId, platform.serialize());
       return platform.serialize();

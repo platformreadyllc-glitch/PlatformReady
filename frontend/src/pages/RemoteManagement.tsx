@@ -14,9 +14,12 @@ import { Button } from '@/components/ui/button'
 import { API } from '@/hooks/usePlatformSocket'
 import { readActivePlatforms } from '@/lib/platformHelpers'
 
+type HardwareType = 'side' | 'chief'
+
 interface RemoteSerialized {
   remoteId: string
   role: string
+  hardwareType?: HardwareType
   hasVibration: boolean
   hasDisplay: boolean
 }
@@ -35,6 +38,7 @@ interface DragData {
   remoteId: string
   sourcePlatformId: string | null
   role: string
+  hardwareType?: HardwareType
   isActive: boolean
 }
 
@@ -55,7 +59,40 @@ function roleTag(role: string): string {
   if (role === 'chief') return 'chief'
   if (role === 'left') return 'left side'
   if (role === 'right') return 'right side'
+  if (role === 'spare') return 'unassigned'
   return role
+}
+
+// A side remote's case doesn't expose its (physically-present-but-covered)
+// clock button, so it can't serve as chief, and vice versa. Mirrors the
+// backend's isHardwareTypeCompatible() (backend/src/platform/models/hardware-compat.ts).
+// Undefined hardwareType (pre-B2 firmware) means "no restriction".
+function isHardwareTypeCompatible(hardwareType: HardwareType | undefined, role: string): boolean {
+  if (!hardwareType) return true
+  if (hardwareType === 'chief') return role === 'chief' || role === 'spare'
+  return role === 'left' || role === 'right' || role === 'spare'
+}
+
+// Physical remotes: chief always shows just "chief" (chief hardware only
+// ever serves the chief role, no ambiguity). Side remotes show just "side"
+// unless currently assigned to a specific slot, in which case they show
+// "side - left"/"side - right". `isAssigned` should be false for pool
+// entries, the drag ghost, and a card while it's actively being dragged (its
+// old assignment is "in flux") — true only for a settled, in-slot remote.
+function remoteLabel(
+  entry: { remoteId: string; role: string; hardwareType?: HardwareType },
+  isAssigned: boolean,
+): string {
+  if (isKb(entry.remoteId)) return 'keyboard'
+  if (!entry.hardwareType) return roleTag(entry.role) // fallback for very old, untagged remotes
+  if (entry.hardwareType === 'chief') return 'chief'
+  return isAssigned && (entry.role === 'left' || entry.role === 'right')
+    ? `side - ${entry.role}`
+    : 'side'
+}
+
+function blockedReason(role: string): string {
+  return role === 'chief' ? 'chief hardware only' : 'side hardware only'
 }
 
 // ── Active remote chip (draggable, lives inside a role slot) ─────────────────
@@ -63,7 +100,13 @@ function roleTag(role: string): string {
 function ActiveRemote({ remote, platformId }: { remote: RemoteSerialized; platformId: string }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `active:${platformId}:${remote.remoteId}`,
-    data: { remoteId: remote.remoteId, sourcePlatformId: platformId, role: remote.role, isActive: true } as DragData,
+    data: {
+      remoteId: remote.remoteId,
+      sourcePlatformId: platformId,
+      role: remote.role,
+      hardwareType: remote.hardwareType,
+      isActive: true,
+    } as DragData,
   })
   return (
     <div
@@ -75,9 +118,7 @@ function ActiveRemote({ remote, platformId }: { remote: RemoteSerialized; platfo
       }`}
     >
       <span className="text-xs font-mono text-primary font-medium truncate">{remote.remoteId}</span>
-      <span className="text-xs text-secondary">
-        {isKb(remote.remoteId) ? 'keyboard' : roleTag(remote.role)}
-      </span>
+      <span className="text-xs text-secondary">{remoteLabel(remote, !isDragging)}</span>
     </div>
   )
 }
@@ -89,20 +130,31 @@ function RoleSlot({ platformId, role, remote }: { platformId: string; role: stri
   const { active } = useDndContext()
   const drag = active?.data.current as DragData | undefined
 
-  let slotState: 'neutral' | 'allowed' | 'blocked' = 'neutral'
+  // kb-* (virtual) remotes keep exact-role matching — they're not
+  // reassignable hardware. Physical remotes match on hardwareType instead:
+  // a side/chief remote can go into any role its hardware supports,
+  // regardless of whatever role it happens to carry from a previous
+  // assignment (activating/replacing sets the role to match the slot).
+  let slotState: 'neutral' | 'allowed' | 'blocked' | 'hardware-blocked' = 'neutral'
   if (drag) {
     const isNoOp = drag.isActive && drag.sourcePlatformId === platformId && remote?.remoteId === drag.remoteId
     if (!isNoOp) {
-      const roleMatch = drag.role === role
       const kbCrossPlat = isKb(drag.remoteId) && drag.sourcePlatformId !== null && drag.sourcePlatformId !== platformId
-      slotState = roleMatch && !kbCrossPlat ? 'allowed' : 'blocked'
+      if (kbCrossPlat) {
+        slotState = 'blocked'
+      } else if (isKb(drag.remoteId)) {
+        slotState = drag.role === role ? 'allowed' : 'blocked'
+      } else {
+        slotState = isHardwareTypeCompatible(drag.hardwareType, role) ? 'allowed' : 'hardware-blocked'
+      }
     }
   }
+  const isBlocked = slotState === 'blocked' || slotState === 'hardware-blocked'
 
   const borderBg =
     slotState === 'allowed'
       ? isOver ? 'border-green-400 bg-green-400/15' : 'border-green-600/50 bg-green-500/5'
-      : slotState === 'blocked'
+      : isBlocked
         ? isOver ? 'border-red-500 bg-red-500/15' : 'border-red-500/40 bg-red-500/5'
         : isOver
           ? 'border-accent bg-accent/10'
@@ -119,7 +171,9 @@ function RoleSlot({ platformId, role, remote }: { platformId: string; role: stri
       {remote ? (
         <ActiveRemote remote={remote} platformId={platformId} />
       ) : (
-        <span className="text-xs text-secondary/60 italic">empty</span>
+        <span className="text-xs text-secondary/60 italic">
+          {slotState === 'hardware-blocked' && isOver ? blockedReason(role) : 'empty'}
+        </span>
       )}
     </div>
   )
@@ -153,6 +207,7 @@ function PoolRemote({ entry }: { entry: PoolEntry }) {
       remoteId: entry.remoteId,
       sourcePlatformId: entry.sourcePlatformId,
       role: entry.role,
+      hardwareType: entry.hardwareType,
       isActive: false,
     } as DragData,
   })
@@ -166,9 +221,7 @@ function PoolRemote({ entry }: { entry: PoolEntry }) {
       }`}
     >
       <span className="text-xs font-mono text-primary font-medium">{entry.remoteId}</span>
-      <span className="text-xs text-secondary">
-        {isKb(entry.remoteId) ? 'keyboard' : roleTag(entry.role)}
-      </span>
+      <span className="text-xs text-secondary">{remoteLabel(entry, false)}</span>
     </div>
   )
 }
@@ -203,11 +256,11 @@ function AvailablePool({ pool }: { pool: PoolEntry[] }) {
 
 // ── Drag overlay ghost ───────────────────────────────────────────────────────
 
-function RemoteGhost({ remoteId }: { remoteId: string }) {
+function RemoteGhost({ remote }: { remote: DragData }) {
   return (
     <div className="flex flex-col gap-0.5 px-3 py-2 rounded-lg border border-accent bg-surface shadow-xl cursor-grabbing select-none pointer-events-none">
-      <span className="text-xs font-mono text-primary font-medium">{remoteId}</span>
-      <span className="text-xs text-secondary">{isKb(remoteId) ? 'keyboard' : 'physical'}</span>
+      <span className="text-xs font-mono text-primary font-medium">{remote.remoteId}</span>
+      <span className="text-xs text-secondary">{remoteLabel(remote, false)}</span>
     </div>
   )
 }
@@ -287,12 +340,19 @@ export default function RemoteManagement() {
     // Activate/replace: drag to role slot
     if (!overId.startsWith('slot:')) return
     const [, targetPlatformId, targetRole] = overId.split(':')
+    const remoteIsKb = isKb(drag.remoteId)
 
-    // Role must match
-    if (drag.role !== targetRole) return
-
-    // Keyboard remotes can only go back to their own platform
-    if (isKb(drag.remoteId) && drag.sourcePlatformId !== null && drag.sourcePlatformId !== targetPlatformId) return
+    if (remoteIsKb) {
+      // Keyboard remotes are fixed to their role and can only go back to
+      // their own platform.
+      if (drag.role !== targetRole) return
+      if (drag.sourcePlatformId !== null && drag.sourcePlatformId !== targetPlatformId) return
+    } else if (!isHardwareTypeCompatible(drag.hardwareType, targetRole)) {
+      // Physical remotes assign role by drop target instead of requiring an
+      // exact match — a side remote can go left or right, a chief remote
+      // only into the chief slot.
+      return
+    }
 
     const targetPlatform = platforms.find((p) => p.platformId === targetPlatformId)
     const occupant = targetPlatform
@@ -310,16 +370,24 @@ export default function RemoteManagement() {
       if (!r.ok) { await fetchPlatforms(); return }
     }
 
-    // Activate or replace on the target platform
+    // Activate or replace on the target platform. Physical remotes get an
+    // explicit role matching the drop target (kb-* remotes don't need
+    // one — the backend ignores it for them, since their role is fixed).
     if (occupant) {
       await fetch(`${API}/platforms/${targetPlatformId}/remotes/replace`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ incomingRemoteId: drag.remoteId, outgoingRemoteId: occupant.remoteId }),
+        body: JSON.stringify({
+          incomingRemoteId: drag.remoteId,
+          outgoingRemoteId: occupant.remoteId,
+          ...(remoteIsKb ? {} : { newRole: targetRole }),
+        }),
       })
     } else {
       await fetch(`${API}/platforms/${targetPlatformId}/remotes/${drag.remoteId}/activate`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(remoteIsKb ? {} : { role: targetRole }),
       })
     }
 
@@ -359,7 +427,7 @@ export default function RemoteManagement() {
       </div>
 
       <DragOverlay dropAnimation={null}>
-        {activeDrag ? <RemoteGhost remoteId={activeDrag.remoteId} /> : null}
+        {activeDrag ? <RemoteGhost remote={activeDrag} /> : null}
       </DragOverlay>
     </DndContext>
   )
