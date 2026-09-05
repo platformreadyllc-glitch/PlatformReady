@@ -20,6 +20,7 @@ static String lastStatus = "READY";
 static unsigned long lastOtaCheck = 0;
 static unsigned long lastActivityMs = 0;
 static unsigned long disconnectedSinceMs = 0;
+static bool wasDisconnected = false;
 
 // ── WiFiManager portal with custom params for full config ────────────────────
 static void runWiFiManager(bool forcePortal) {
@@ -127,6 +128,7 @@ void loop() {
 
   if (!networkConnected()) {
     if (disconnectedSinceMs == 0) disconnectedSinceMs = millis();
+    wasDisconnected = true;
     Serial.println("[loop] no network");
     displayShowError("No network");
 
@@ -143,6 +145,16 @@ void loop() {
     return;
   }
   disconnectedSinceMs = 0;
+
+  // Network just came back — nothing else in loop() proactively redraws the
+  // screen on reconnect (only specific events do: a button press, the
+  // periodic OTA check), so without this the device could be working fine
+  // underneath while still showing a stale "No network" screen.
+  if (wasDisconnected) {
+    wasDisconnected = false;
+    Serial.println("[loop] network restored");
+    displayShowActive(cfg.platformId, cfg.role, lastStatus);
+  }
 
   // Register with backend once — retry every 5 s on failure
   if (!registered && millis() - lastRegisterAttempt > 5000) {
