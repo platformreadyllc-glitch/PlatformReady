@@ -3,6 +3,17 @@
 
 enum class ApiResult { OK, NETWORK_ERROR, SERVER_ERROR };
 
+// Registration response. platformId/role are only meaningful when result is
+// OK. activated reflects whether the backend currently has this remote
+// placed on a platform (vs. sitting unassigned in the pool) — platform/role
+// assignment happens via the remote management page, not at setup time.
+struct ApiRemoteState {
+  ApiResult result = ApiResult::NETWORK_ERROR;
+  String platformId;
+  String role;
+  bool activated = false;
+};
+
 void apiInit(const String& backendHost, const String& platformId, const String& remoteId);
 
 // Host/port already parsed out of backendHost by apiInit(). Exposed so other
@@ -10,9 +21,12 @@ void apiInit(const String& backendHost, const String& platformId, const String& 
 const String& apiGetHost();
 uint16_t apiGetPort();
 
-// Registers this remote on the platform. Call once after network is up.
-// Returns OK or SERVER_ERROR (treat both as "proceed" — 4xx likely means already registered).
-ApiResult apiRegisterRemote(const String& role);
+// Registers this remote with the backend (POST /remotes — not
+// platform-scoped, since a fresh remote has no platform yet). Call once
+// after network is up. hardwareType is "side" or "chief". Returns OK or
+// SERVER_ERROR (treat both as "proceed") along with the backend's current
+// platform/role assignment for this remote, if any.
+ApiRemoteState apiRegisterRemote(const String& hardwareType);
 
 ApiResult apiCastVote(const String& button);   // "white", "red", "blue", "yellow"
 ApiResult apiPressClockButton();

@@ -64,7 +64,10 @@ void displayShowConfigEth(const String& ip) {
 void displayShowActive(const String& platformId, const String& role, const String& status) {
   if (!g_displayPresent) return;
   u8g2.clearBuffer();
-  String hdr = platformId + " - " + role;
+  // platformId is empty until this remote has been assigned to a platform
+  // via the remote management page — show a friendly placeholder instead
+  // of a bare " - ".
+  String hdr = platformId.isEmpty() ? "Unassigned" : (platformId + " - " + role);
   u8g2.setFont(u8g2_font_6x10_tf);
   u8g2.drawStr(0, 10, hdr.c_str());
   // No divider — this is the main in-operation screen, so the reclaimed

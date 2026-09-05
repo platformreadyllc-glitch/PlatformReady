@@ -24,16 +24,14 @@ static void runWiFiManager(bool forcePortal) {
   WiFiManager wm;
   wm.setConfigPortalTimeout(300);  // 5 min before giving up and continuing
 
-  WiFiManagerParameter p_serial("serial",     "Serial (e.g. RL-001)",              cfg.serial.c_str(),      16);
-  WiFiManagerParameter p_type("type",         "Type: side or chief",               cfg.type == RemoteType::CHIEF ? "chief" : "side", 8);
-  WiFiManagerParameter p_host("host",         "Backend URL",                       cfg.backendHost.c_str(), 64);
-  WiFiManagerParameter p_platform("platform", "Platform ID (e.g. platform-1)",     cfg.platformId.c_str(),  32);
-  WiFiManagerParameter p_role("role",         "Role: left, right, or chief",       cfg.role.c_str(),         8);
+  // Platform/role are assigned later via the remote management page, not
+  // at setup time — only the fixed identity fields are collected here.
+  WiFiManagerParameter p_serial("serial", "Serial (e.g. RL-001)",              cfg.serial.c_str(),      16);
+  WiFiManagerParameter p_type("type",     "Type: side or chief",               cfg.type == RemoteType::CHIEF ? "chief" : "side", 8);
+  WiFiManagerParameter p_host("host",     "Backend URL",                       cfg.backendHost.c_str(), 64);
   wm.addParameter(&p_serial);
   wm.addParameter(&p_type);
   wm.addParameter(&p_host);
-  wm.addParameter(&p_platform);
-  wm.addParameter(&p_role);
 
   if (forcePortal) {
     wm.resetSettings();
@@ -54,8 +52,6 @@ static void runWiFiManager(bool forcePortal) {
     cfg.serial      = p_serial.getValue();
     cfg.type        = String(p_type.getValue()) == "chief" ? RemoteType::CHIEF : RemoteType::SIDE;
     cfg.backendHost = p_host.getValue();
-    cfg.platformId  = p_platform.getValue();
-    cfg.role        = p_role.getValue();
     configSave(cfg);
     cfg.configured  = true;
   }
@@ -138,12 +134,31 @@ void loop() {
   if (!registered && millis() - lastRegisterAttempt > 5000) {
     lastRegisterAttempt = millis();
     Serial.println("[loop] registering...");
-    ApiResult r = apiRegisterRemote(cfg.role);
-    Serial.printf("[loop] register result=%d\n", (int)r);
+    String hardwareType = cfg.type == RemoteType::CHIEF ? "chief" : "side";
+    ApiRemoteState state = apiRegisterRemote(hardwareType);
+    Serial.printf("[loop] register result=%d\n", (int)state.result);
     // OK: freshly registered.  SERVER_ERROR: probably already registered — proceed anyway.
-    if (r == ApiResult::OK || r == ApiResult::SERVER_ERROR) {
+    if (state.result == ApiResult::OK || state.result == ApiResult::SERVER_ERROR) {
       registered  = true;
       lastStatus  = "READY";
+
+      // Adopt the backend's current platform/role assignment (if any) —
+      // assignment happens via the remote management page, not at setup
+      // time, so this is the only way the device learns it. Clear any
+      // stale cached assignment if the backend no longer has one (e.g. a
+      // fresh pool registration).
+      if (state.activated) {
+        if (cfg.platformId != state.platformId || cfg.role != state.role) {
+          cfg.platformId = state.platformId;
+          cfg.role       = state.role;
+          configSave(cfg);
+        }
+      } else if (!cfg.platformId.isEmpty() || !cfg.role.isEmpty()) {
+        cfg.platformId = "";
+        cfg.role       = "";
+        configSave(cfg);
+      }
+
       displayShowActive(cfg.platformId, cfg.role, lastStatus);
       hapticDoubleClick();
 

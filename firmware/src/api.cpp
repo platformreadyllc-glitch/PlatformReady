@@ -57,32 +57,39 @@ static ApiResult postWithResponse(const String& path, const String& body, String
   return (code >= 200 && code < 300) ? ApiResult::OK : ApiResult::SERVER_ERROR;
 }
 
-ApiResult apiRegisterRemote(const String& role) {
+ApiRemoteState apiRegisterRemote(const String& hardwareType) {
   JsonDocument doc;
   doc["remoteId"]     = g_remoteId;
-  doc["role"]         = role;
+  doc["hardwareType"] = hardwareType;
   doc["hasVibration"] = true;
   doc["hasDisplay"]   = true;
-  doc["active"]       = false;
   String body;
   serializeJson(doc, body);
 
   String response;
-  ApiResult result = postWithResponse(
-    "/platforms/" + g_platformId + "/remotes", body, response);
+  ApiRemoteState state;
+  state.result = postWithResponse("/remotes", body, response);
 
-  if (result == ApiResult::OK) {
+  if (state.result == ApiResult::OK) {
     JsonDocument resp;
     if (deserializeJson(resp, response) == DeserializationError::Ok) {
-      const char* assignedPlatformId = resp["platformId"];
-      if (assignedPlatformId && g_platformId != assignedPlatformId) {
-        Serial.printf("[api] transferred to platform: %s\n", assignedPlatformId);
-        g_platformId = assignedPlatformId;
+      const char* platformId = resp["platformId"];
+      const char* role       = resp["role"];
+      if (platformId) {
+        state.platformId = platformId;
+        state.activated  = true;
+        if (g_platformId != platformId) {
+          Serial.printf("[api] platform: %s\n", platformId);
+          g_platformId = platformId;
+        }
+      }
+      if (role) {
+        state.role = role;
       }
     }
   }
 
-  return result;
+  return state;
 }
 
 ApiResult apiCastVote(const String& button) {
