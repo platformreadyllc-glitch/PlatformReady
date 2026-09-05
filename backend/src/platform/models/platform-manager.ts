@@ -97,7 +97,17 @@ export class PlatformManager {
     options: { hasVibration?: boolean; hasDisplay?: boolean } = {},
   ): Remote {
     const poolEntry = this.physicalPool.get(remoteId);
-    if (poolEntry) return poolEntry;
+    if (poolEntry) {
+      // Refresh self-reported capabilities even for an already-pooled
+      // remote — see the equivalent comment in
+      // PlatformService.registerPhysicalRemote.
+      poolEntry.hardwareType = hardwareType;
+      if (options.hasVibration !== undefined)
+        poolEntry.hasVibration = options.hasVibration;
+      if (options.hasDisplay !== undefined)
+        poolEntry.hasDisplay = options.hasDisplay;
+      return poolEntry;
+    }
     for (const p of this._platforms.values()) {
       const active = p.activeRemotes.get(remoteId);
       if (active) return active;

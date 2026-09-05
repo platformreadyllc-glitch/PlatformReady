@@ -78,6 +78,46 @@ describe('PlatformService.ensurePlatform', () => {
   });
 });
 
+describe('PlatformService.registerPhysicalRemote', () => {
+  it('registers a new remote into the pool as spare', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw, makeLc());
+    const result = svc.registerPhysicalRemote({
+      remoteId: 'phys-1',
+      hardwareType: 'side',
+    } as any);
+    expect(result.role).toBe('spare');
+    expect(result.platformId).toBeNull();
+    expect(result.hardwareType).toBe('side');
+  });
+
+  it('backfills hardwareType/capabilities on an already-active remote instead of ignoring them', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw, makeLc());
+    svc.ensurePlatform({ platformId: 'p1', name: 'P1' });
+    svc.deactivateRemote('p1', 'kb-left'); // free a slot — ensurePlatform seeds 3 active kb-* remotes
+    svc.registerPhysicalRemote({
+      remoteId: 'phys-2',
+      hardwareType: 'side',
+    } as any);
+    svc.activateRemote('p1', 'phys-2', 'left' as any);
+
+    // Simulates a remote that was already active before hardwareType
+    // existed (or before its firmware started reporting it), re-registering
+    // under the current firmware — role/platform must stay untouched, but
+    // capabilities should refresh rather than staying undefined forever.
+    const result = svc.registerPhysicalRemote({
+      remoteId: 'phys-2',
+      hardwareType: 'side',
+      hasVibration: true,
+    } as any);
+    expect(result.platformId).toBe('p1');
+    expect(result.role).toBe('left');
+    expect(result.hardwareType).toBe('side');
+    expect(result.hasVibration).toBe(true);
+  });
+});
+
 describe('PlatformService.castVote', () => {
   it('emits platform:updated via gateway after a vote', () => {
     const gw = makeGateway();

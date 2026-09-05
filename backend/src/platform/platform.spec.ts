@@ -853,12 +853,18 @@ describe('PlatformManager', () => {
     );
   });
 
-  it('registerPool is idempotent for an already-pooled remote', () => {
+  it('registerPool is idempotent (same object) but refreshes hardwareType/capabilities', () => {
     const manager = new PlatformManager();
     const first = manager.registerPool('phys-side-2', 'side');
-    const second = manager.registerPool('phys-side-2', 'chief');
+    const second = manager.registerPool('phys-side-2', 'chief', {
+      hasVibration: true,
+    });
     expect(second).toBe(first);
-    expect(second.hardwareType).toBe('side');
+    // Re-registering doesn't create a new pool entry, but does refresh
+    // self-reported capabilities - otherwise a remote pooled before
+    // hardwareType existed would carry it as undefined forever.
+    expect(second.hardwareType).toBe('chief');
+    expect(second.hasVibration).toBe(true);
   });
 
   it('registerPool returns the existing remote if already active on a platform', () => {

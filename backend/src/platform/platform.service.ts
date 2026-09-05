@@ -140,7 +140,18 @@ export class PlatformService {
   // lands in the pool as 'spare' and gets assigned via the management page.
   registerPhysicalRemote(dto: RegisterPhysicalRemoteDto) {
     const active = this.findActiveRemote(dto.remoteId);
-    if (active) return active.serialize();
+    if (active) {
+      // Role/platform stay untouched (that's the whole point of the
+      // idempotent check), but refresh self-reported capabilities even for
+      // an already-assigned remote — otherwise a remote that was active
+      // before hardwareType existed would carry hardwareType: undefined
+      // forever, since nothing else ever re-derives it.
+      active.hardwareType = dto.hardwareType;
+      if (dto.hasVibration !== undefined)
+        active.hasVibration = dto.hasVibration;
+      if (dto.hasDisplay !== undefined) active.hasDisplay = dto.hasDisplay;
+      return active.serialize();
+    }
     try {
       const remote = this.manager.registerPool(dto.remoteId, dto.hardwareType, {
         hasVibration: dto.hasVibration,
