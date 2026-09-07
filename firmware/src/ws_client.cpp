@@ -19,8 +19,26 @@ struct PendingAssignment {
 };
 static PendingAssignment g_pendingAssignment;
 
-static RefereeVotes g_votes;
-static bool g_votesChanged = false;
+// Raw per-role vote strings as last received from the backend (empty =
+// no vote cast), and the wall-clock instant (millis(), 0 = unset) all
+// three most recently became simultaneously non-empty - the anchor for
+// the group-reveal delay below. Both are pure inputs to wsGetScoreboard()'s
+// derivation, not display-ready state themselves.
+struct RawVotes {
+  String left;
+  String right;
+  String chief;
+};
+static RawVotes g_rawVotes;
+static unsigned long g_completeSince = 0;
+static const unsigned long REVEAL_DELAY_MS = 1000;
+
+static PlatformClockDisplay g_clock;
+
+static bool allVoted() {
+  return !g_rawVotes.left.isEmpty() && !g_rawVotes.right.isEmpty() &&
+         !g_rawVotes.chief.isEmpty();
+}
 
 static void handleTextFrame(uint8_t* payload, size_t length) {
   JsonDocument doc;
@@ -41,14 +59,30 @@ static void handleTextFrame(uint8_t* payload, size_t length) {
     Serial.printf("[ws] assignment: platform=%s role=%s\n",
                    g_pendingAssignment.platformId.c_str(),
                    g_pendingAssignment.role.c_str());
-  } else if (strcmp(msgType, "votes") == 0) {
+  } else if (strcmp(msgType, "state") == 0) {
     const char* left  = doc["votes"]["left"];
     const char* right = doc["votes"]["right"];
     const char* chief = doc["votes"]["chief"];
-    g_votes.left    = left ? left : "";
-    g_votes.right   = right ? right : "";
-    g_votes.chief   = chief ? chief : "";
-    g_votesChanged  = true;
+    g_rawVotes.left  = left ? left : "";
+    g_rawVotes.right = right ? right : "";
+    g_rawVotes.chief = chief ? chief : "";
+
+    // Edge-detect the moment all three become simultaneously non-empty -
+    // this timestamp is the anchor wsGetScoreboard() times the group
+    // reveal delay against. Only set once per completion; cleared as soon
+    // as votes become incomplete again (e.g. the backend's auto-reset),
+    // so the next completion restarts the delay from scratch.
+    if (allVoted()) {
+      if (g_completeSince == 0) g_completeSince = millis();
+    } else {
+      g_completeSince = 0;
+    }
+
+    const char* clockMode  = doc["clock"]["mode"];
+    const char* clockState = doc["clock"]["state"];
+    g_clock.mode      = clockMode ? clockMode : "";
+    g_clock.state     = clockState ? clockState : "";
+    g_clock.remaining = doc["clock"]["remaining"] | 0.0f;
   }
 }
 
@@ -93,9 +127,28 @@ bool wsPollAssignmentChange(String& platformId, String& role) {
   return true;
 }
 
-bool wsPollVotesChange(RefereeVotes& votes) {
-  if (!g_votesChanged) return false;
-  votes = g_votes;
-  g_votesChanged = false;
-  return true;
+static RefereeVoteDisplay deriveVoteDisplay(const String& raw) {
+  RefereeVoteDisplay d;
+  if (raw.isEmpty()) {
+    d.state = VoteDisplayState::NOT_VOTED;
+    return d;
+  }
+  bool revealed = g_completeSince != 0 &&
+                  (millis() - g_completeSince >= REVEAL_DELAY_MS);
+  if (revealed) {
+    d.state  = VoteDisplayState::REVEALED;
+    d.button = raw;
+  } else {
+    d.state = VoteDisplayState::HIDDEN;
+  }
+  return d;
+}
+
+ScoreboardState wsGetScoreboard() {
+  ScoreboardState s;
+  s.left  = deriveVoteDisplay(g_rawVotes.left);
+  s.right = deriveVoteDisplay(g_rawVotes.right);
+  s.chief = deriveVoteDisplay(g_rawVotes.chief);
+  s.clock = g_clock;
+  return s;
 }

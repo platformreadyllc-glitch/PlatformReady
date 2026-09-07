@@ -1,16 +1,6 @@
 #pragma once
 #include <Arduino.h>
 
-// Cached last-known votes from the other referees active on this remote's
-// platform, pushed by the backend over the WS connection (see
-// esp-remotes.gateway.ts). Empty string means "no vote cast" (mirrors the
-// backend's null) — consumed by the mini-scoreboard display.
-struct RefereeVotes {
-  String left;
-  String right;
-  String chief;
-};
-
 // Opens the persistent WS connection to the backend and registers the
 // event handler. Call once after a successful registration (main.cpp),
 // once remoteId (cfg.serial) is known — see esp-remotes.gateway.ts, which
@@ -26,9 +16,42 @@ void wsLoop();
 
 // Returns true and fills platformId/role if a new assignment arrived since
 // the last call (and clears the pending flag) - empty strings mean
-// "unassigned". False if nothing changed since the last call.
+// "unassigned". False if nothing changed since the last call. Unlike the
+// scoreboard state below, this has one-shot side effects at the call site
+// (configSave, haptics) so it must fire exactly once per change.
 bool wsPollAssignmentChange(String& platformId, String& role);
 
-// Returns true and fills votes if they changed since the last call (and
-// clears the pending flag). False if nothing changed since the last call.
-bool wsPollVotesChange(RefereeVotes& votes);
+// Mirrors the main scoring page's own reveal behavior: a referee's circle
+// stays empty until they vote, shows an unrevealed ring once they have
+// (even before the other two), then all three reveal together ~1s after
+// the last of the three votes lands. REVEALED is the only state where
+// `button` is meaningful ("white"/"red"/"blue"/"yellow").
+enum class VoteDisplayState { NOT_VOTED, HIDDEN, REVEALED };
+
+struct RefereeVoteDisplay {
+  VoteDisplayState state = VoteDisplayState::NOT_VOTED;
+  String button;
+};
+
+// mode: "ACTIVE"/"BREAK", state: "IDLE"/"RUNNING"/"EXPIRED" - mirrors
+// PlatformClockSerialized minus the opening-attempts fields, which this
+// secondary display deliberately doesn't track.
+struct PlatformClockDisplay {
+  String mode;
+  String state;
+  float remaining = 0;
+};
+
+struct ScoreboardState {
+  RefereeVoteDisplay left;
+  RefereeVoteDisplay right;
+  RefereeVoteDisplay chief;
+  PlatformClockDisplay clock;
+};
+
+// Re-derives and returns the current scoreboard display state (vote
+// reveal state per role, plus the latest clock snapshot). A pure read,
+// safe to call as often as needed (e.g. every redraw tick) - the reveal
+// delay is timed internally against millis(), not tied to any single
+// incoming message.
+ScoreboardState wsGetScoreboard();

@@ -86,6 +86,77 @@ void displayShowActive(const String& platformId, const String& role, const Strin
   u8g2.sendBuffer();
 }
 
+// Formats seconds as "M:SS" (no leading zero on minutes - clocks here
+// range from a 60s attempt up to a 20min break, never triple-digit
+// minutes). Negative input (shouldn't happen - backend clamps to 0)
+// still renders sensibly rather than a garbled negative string.
+static String formatClock(float remainingSeconds) {
+  if (remainingSeconds < 0) remainingSeconds = 0;
+  int totalSeconds = (int)(remainingSeconds + 0.5f);
+  int minutes = totalSeconds / 60;
+  int seconds = totalSeconds % 60;
+  char buf[8];
+  snprintf(buf, sizeof(buf), "%d:%02d", minutes, seconds);
+  return String(buf);
+}
+
+// One referee's circle: role letter above, a ring (single line = not
+// voted yet, concentric double line = voted but not yet revealed), and
+// once revealed a hand-drawn checkmark (white/good) or X with the
+// infraction letter below (no font here has check/X glyphs - confirmed
+// against u8g2's font tables, all Latin-1-only).
+static void drawScoreColumn(int centerX, const char* label, const ScoreVote& vote) {
+  const int cy = 48;
+  const int r  = 8;
+
+  u8g2.setFont(u8g2_font_6x10_tf);
+  u8g2.drawStr(centerX - u8g2.getStrWidth(label) / 2, 38, label);
+
+  u8g2.drawCircle(centerX, cy, r);
+
+  switch (vote.state) {
+    case ScoreVoteState::EMPTY:
+      break;
+    case ScoreVoteState::HIDDEN:
+      u8g2.drawCircle(centerX, cy, r - 1);
+      break;
+    case ScoreVoteState::REVEALED:
+      if (vote.button == "white") {
+        u8g2.drawLine(centerX - 4, cy, centerX - 1, cy + 4);
+        u8g2.drawLine(centerX - 1, cy + 4, centerX + 5, cy - 5);
+      } else {
+        u8g2.drawLine(centerX - 5, cy - 5, centerX + 5, cy + 5);
+        u8g2.drawLine(centerX - 5, cy + 5, centerX + 5, cy - 5);
+        char letter = 'R';
+        if (vote.button == "blue") letter = 'B';
+        else if (vote.button == "yellow") letter = 'Y';
+        char buf[2] = { letter, '\0' };
+        u8g2.drawStr(centerX - u8g2.getStrWidth(buf) / 2, 63, buf);
+      }
+      break;
+  }
+}
+
+void displayShowScoreboard(const String& status, const ScoreVote& left,
+                            const ScoreVote& chief, const ScoreVote& right,
+                            float clockRemaining) {
+  if (!g_displayPresent) return;
+  u8g2.clearBuffer();
+
+  u8g2.setFont(u8g2_font_6x10_tf);
+  u8g2.drawStr(0, 9, status.c_str());
+
+  u8g2.setFont(u8g2_font_9x18B_tf);
+  String clockStr = formatClock(clockRemaining);
+  u8g2.drawStr((128 - u8g2.getStrWidth(clockStr.c_str())) / 2, 28, clockStr.c_str());
+
+  drawScoreColumn(21, "L", left);
+  drawScoreColumn(64, "C", chief);
+  drawScoreColumn(107, "R", right);
+
+  u8g2.sendBuffer();
+}
+
 void displayShowError(const String& msg) {
   if (!g_displayPresent) return;
   u8g2.clearBuffer();

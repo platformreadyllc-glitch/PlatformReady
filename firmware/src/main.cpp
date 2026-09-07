@@ -22,6 +22,36 @@ static unsigned long lastOtaCheck = 0;
 static unsigned long lastActivityMs = 0;
 static unsigned long disconnectedSinceMs = 0;
 static bool wasDisconnected = false;
+static unsigned long lastScoreboardTick = 0;
+
+static ScoreVote toScoreVote(const RefereeVoteDisplay& v) {
+  ScoreVote sv;
+  switch (v.state) {
+    case VoteDisplayState::NOT_VOTED: sv.state = ScoreVoteState::EMPTY;    break;
+    case VoteDisplayState::HIDDEN:    sv.state = ScoreVoteState::HIDDEN;   break;
+    case VoteDisplayState::REVEALED:  sv.state = ScoreVoteState::REVEALED; break;
+  }
+  sv.button = v.button;
+  return sv;
+}
+
+// Single choke point for "redraw whatever's currently true" - shows the
+// live mini-scoreboard once registered and assigned to a platform, or
+// falls back to the plain unassigned/status screen otherwise (including
+// the window right after boot where cfg.platformId may still hold a
+// stale cached assignment from before this registration cycle has
+// reconfirmed it with the backend). Replaces the repeated
+// `displayShowActive(cfg.platformId, cfg.role, lastStatus)` call sites
+// below - keeps display.cpp itself free of any ws_client.h dependency.
+static void refreshDisplay() {
+  if (!registered || cfg.platformId.isEmpty()) {
+    displayShowActive(cfg.platformId, cfg.role, lastStatus);
+    return;
+  }
+  ScoreboardState s = wsGetScoreboard();
+  displayShowScoreboard(lastStatus, toScoreVote(s.left), toScoreVote(s.chief),
+                         toScoreVote(s.right), s.clock.remaining);
+}
 
 // ── WiFiManager portal with custom params for full config ────────────────────
 static void runWiFiManager(bool forcePortal) {
@@ -157,7 +187,7 @@ void loop() {
   if (wasDisconnected) {
     wasDisconnected = false;
     Serial.println("[loop] network restored");
-    displayShowActive(cfg.platformId, cfg.role, lastStatus);
+    refreshDisplay();
   }
 
   // Register with backend once — retry every 5 s on failure
@@ -189,7 +219,7 @@ void loop() {
         configSave(cfg);
       }
 
-      displayShowActive(cfg.platformId, cfg.role, lastStatus);
+      refreshDisplay();
       hapticDoubleClick();
 
       // Registering successfully is our "this firmware works" milestone —
@@ -204,11 +234,22 @@ void loop() {
       // for their first update check.
       lastOtaCheck = millis();
       otaCheckAndApply(cfg, true);
-      displayShowActive(cfg.platformId, cfg.role, lastStatus);
+      refreshDisplay();
     }
   }
 
   if (!registered) return;
+
+  // Periodic redraw while assigned to a platform - the mini-scoreboard's
+  // hidden->revealed vote transition is timed purely against millis(), not
+  // triggered by any incoming message, so nothing else would ever redraw
+  // it. Also keeps the displayed clock roughly current between the
+  // backend's ~1/sec pushes. Unconditional (no dirty-flag check) - a
+  // full-buffer redraw on this OLED is cheap and 4Hz is a light load.
+  if (!cfg.platformId.isEmpty() && millis() - lastScoreboardTick > 250) {
+    lastScoreboardTick = millis();
+    refreshDisplay();
+  }
 
   // ── Live assignment updates ─────────────────────────────────────────────
   // Lets a reassignment made via the remote management page take effect
@@ -221,7 +262,7 @@ void loop() {
     configSave(cfg);
     apiSetPlatformId(newPlatformId);
     lastStatus = "READY";
-    displayShowActive(cfg.platformId, cfg.role, lastStatus);
+    refreshDisplay();
     hapticDoubleClick();
     Serial.printf("[loop] assignment changed: platform=%s role=%s\n",
                    cfg.platformId.c_str(), cfg.role.c_str());
@@ -245,7 +286,7 @@ void loop() {
       lastStatus = "ERR";
       hapticError();
     }
-    displayShowActive(cfg.platformId, cfg.role, lastStatus);
+    refreshDisplay();
   }
 
   // ── Clock button (chief only) ─────────────────────────────────────────────
@@ -261,7 +302,7 @@ void loop() {
       lastStatus = "ERR";
       hapticError();
     }
-    displayShowActive(cfg.platformId, cfg.role, lastStatus);
+    refreshDisplay();
   }
 
   // ── Periodic OTA check ────────────────────────────────────────────────────
@@ -272,6 +313,6 @@ void loop() {
     lastOtaCheck = millis();
     bool idle = (millis() - lastActivityMs) > OTA_IDLE_THRESHOLD_MS;
     otaCheckAndApply(cfg, idle);
-    displayShowActive(cfg.platformId, cfg.role, lastStatus);
+    refreshDisplay();
   }
 }
