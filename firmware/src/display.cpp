@@ -100,23 +100,23 @@ static String formatClock(float remainingSeconds) {
   return String(buf);
 }
 
-// One referee's circle: a ring (single line = not voted yet, concentric
-// double line = voted but not yet revealed), and once revealed a
-// hand-drawn checkmark (white/good) or X with the infraction letter below
-// (no font here has check/X glyphs - confirmed against u8g2's font
-// tables, all Latin-1-only). No role label above it — removed per user
-// feedback to free up vertical space.
+// One referee's circle: nothing at all until this referee votes, then a
+// ring (voted, not yet revealed), then a hand-drawn checkmark (white/good)
+// or X with the infraction letter below once revealed (no font here has
+// check/X glyphs - confirmed against u8g2's font tables, all
+// Latin-1-only). No role label above it — removed per user feedback to
+// free up vertical space.
 static void drawScoreColumn(int centerX, const ScoreVote& vote) {
   const int cy = 13;
   const int r  = 10;
+
+  if (vote.state == ScoreVoteState::EMPTY) return;
 
   u8g2.drawCircle(centerX, cy, r);
 
   switch (vote.state) {
     case ScoreVoteState::EMPTY:
-      break;
     case ScoreVoteState::HIDDEN:
-      u8g2.drawCircle(centerX, cy, r - 1);
       break;
     case ScoreVoteState::REVEALED:
       if (vote.button == "white") {
