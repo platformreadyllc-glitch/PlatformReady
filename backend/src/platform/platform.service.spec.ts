@@ -29,7 +29,7 @@ function makeLc(): jest.Mocked<LiftingCastService> {
 function makeEspGateway(): jest.Mocked<EspRemotesGateway> {
   return {
     pushAssignment: jest.fn(),
-    broadcastVotes: jest.fn(),
+    broadcastPlatformState: jest.fn(),
   } as unknown as jest.Mocked<EspRemotesGateway>;
 }
 
@@ -195,16 +195,17 @@ describe('PlatformService ESP32 WS integration', () => {
     expect(gw.emitPlatformUpdate).not.toHaveBeenCalled();
   });
 
-  it('castVote broadcasts the platform votes to ESP32 remotes via espGateway', () => {
+  it('castVote broadcasts the platform votes+clock to ESP32 remotes via espGateway', () => {
     const gw = makeGateway();
     const esp = makeEspGateway();
     const svc = new PlatformService(gw, makeLc(), esp);
     svc.ensurePlatform({ platformId: 'p1' });
     svc.pressClockButton('p1', 'kb-chief');
     svc.castVote('p1', 'kb-left', 'white' as any);
-    expect(esp.broadcastVotes).toHaveBeenCalledWith(
+    expect(esp.broadcastPlatformState).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ left: 'white' }),
+      expect.objectContaining({ mode: 'ACTIVE' }),
     );
   });
 

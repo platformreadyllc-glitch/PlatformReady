@@ -83,18 +83,20 @@ export class PlatformService {
 
   // Single choke point for "a platform's state changed" - pushes the
   // existing browser-facing update and, new here, the platform's current
-  // votes to every ESP32 remote active on it. Replaces the ~13 call sites
-  // that used to call gateway.emitPlatformUpdate directly, so the two
-  // broadcasts can never drift out of sync as they evolve independently.
+  // votes+clock to every ESP32 remote active on it (for the on-remote
+  // mini-scoreboard). Replaces the ~13 call sites that used to call
+  // gateway.emitPlatformUpdate directly, so the two broadcasts can never
+  // drift out of sync as they evolve independently.
   private broadcastPlatformUpdate(
     platformId: string,
     platform: Platform,
   ): void {
     const serialized = platform.serialize();
     this.gateway.emitPlatformUpdate(platformId, serialized);
-    this.espGateway?.broadcastVotes(
+    this.espGateway?.broadcastPlatformState(
       platform.activeRemotes.keys(),
       serialized.votes,
+      serialized.clock,
     );
   }
 

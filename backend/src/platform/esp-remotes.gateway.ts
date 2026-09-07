@@ -9,6 +9,7 @@ import { HttpAdapterHost } from '@nestjs/core';
 import { WebSocketServer, WebSocket } from 'ws';
 import { PlatformService } from './platform.service';
 import { Role, Button } from './models/enums';
+import { PlatformClockSerialized } from './models/platform-clock';
 
 type LiveSocket = WebSocket & { isAlive?: boolean };
 
@@ -101,13 +102,17 @@ export class EspRemotesGateway
     this.send(remoteId, { type: 'assignment', platformId, role });
   }
 
-  // Called by PlatformService whenever a platform's votes change.
-  broadcastVotes(
+  // Called by PlatformService whenever a platform's votes or clock change -
+  // in practice, on every action (vote/clock press/reset/break/etc.) and
+  // once a second while a clock is running, mirroring the cadence the
+  // browser-facing PlatformGateway already gets via the same call site.
+  broadcastPlatformState(
     activeRemoteIds: Iterable<string>,
     votes: Record<string, Button | null>,
+    clock: PlatformClockSerialized,
   ): void {
     for (const remoteId of activeRemoteIds) {
-      this.send(remoteId, { type: 'votes', votes });
+      this.send(remoteId, { type: 'state', votes, clock });
     }
   }
 
