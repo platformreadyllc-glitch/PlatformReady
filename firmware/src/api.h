@@ -21,6 +21,13 @@ void apiInit(const String& backendHost, const String& platformId, const String& 
 const String& apiGetHost();
 uint16_t apiGetPort();
 
+// Updates the platformId used to build vote/clock URLs. Needed because a
+// live reassignment can arrive over the WS connection (ws_client.cpp) after
+// apiInit() has already run — without this, apiCastVote()/
+// apiPressClockButton() would keep posting to the remote's old platform
+// until the next reboot.
+void apiSetPlatformId(const String& platformId);
+
 // Registers this remote with the backend (POST /remotes — not
 // platform-scoped, since a fresh remote has no platform yet). Call once
 // after network is up. hardwareType is "side" or "chief". Returns OK or

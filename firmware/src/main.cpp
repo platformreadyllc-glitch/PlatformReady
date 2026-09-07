@@ -12,6 +12,7 @@
 #include "ota.h"
 #include "version.h"
 #include "watchdog.h"
+#include "ws_client.h"
 
 static RemoteConfig cfg;
 static bool registered = false;
@@ -125,6 +126,9 @@ void setup() {
 
 void loop() {
   watchdogFeed();
+  // Non-blocking regardless of WiFi state, and a no-op before wsInit() has
+  // run - safe to pump unconditionally ahead of the network gate below.
+  wsLoop();
 
   if (!networkConnected()) {
     if (disconnectedSinceMs == 0) disconnectedSinceMs = millis();
@@ -192,6 +196,10 @@ void loop() {
       // cancels any pending-update/rollback bookkeeping from a prior OTA.
       otaMarkValid();
 
+      // Opens the persistent connection used for liveness, live assignment
+      // sync, and (eventually) the mini-scoreboard - see ws_client.h.
+      wsInit(cfg.serial);
+
       // Don't make freshly-booted devices wait up to OTA_CHECK_INTERVAL_MS
       // for their first update check.
       lastOtaCheck = millis();
@@ -201,6 +209,23 @@ void loop() {
   }
 
   if (!registered) return;
+
+  // ── Live assignment updates ─────────────────────────────────────────────
+  // Lets a reassignment made via the remote management page take effect
+  // immediately instead of only at the next reboot (see
+  // esp-remotes.gateway.ts on the backend).
+  String newPlatformId, newRole;
+  if (wsPollAssignmentChange(newPlatformId, newRole)) {
+    cfg.platformId = newPlatformId;
+    cfg.role       = newRole;
+    configSave(cfg);
+    apiSetPlatformId(newPlatformId);
+    lastStatus = "READY";
+    displayShowActive(cfg.platformId, cfg.role, lastStatus);
+    hapticDoubleClick();
+    Serial.printf("[loop] assignment changed: platform=%s role=%s\n",
+                   cfg.platformId.c_str(), cfg.role.c_str());
+  }
 
   // ── Vote buttons ─────────────────────────────────────────────────────────
   const Button    voteButtons[] = { Button::WHITE, Button::RED, Button::BLUE, Button::YELLOW };
