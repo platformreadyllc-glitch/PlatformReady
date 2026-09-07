@@ -33,7 +33,14 @@ static RawVotes g_rawVotes;
 static unsigned long g_completeSince = 0;
 static const unsigned long REVEAL_DELAY_MS = 1000;
 
+// g_clock.remaining holds the value as of the last push, not "right now" -
+// the backend only pushes ~once/sec (while running), so displaying it
+// verbatim visibly lags the frontend, which locally interpolates a smooth
+// countdown between its own pushes (see usePlatformState.ts). g_clockAnchorMs
+// is the millis() this anchor was captured at; wsGetScoreboard() derives the
+// actual current value the same way the frontend does.
 static PlatformClockDisplay g_clock;
+static unsigned long g_clockAnchorMs = 0;
 
 static bool allVoted() {
   return !g_rawVotes.left.isEmpty() && !g_rawVotes.right.isEmpty() &&
@@ -83,6 +90,7 @@ static void handleTextFrame(uint8_t* payload, size_t length) {
     g_clock.mode      = clockMode ? clockMode : "";
     g_clock.state     = clockState ? clockState : "";
     g_clock.remaining = doc["clock"]["remaining"] | 0.0f;
+    g_clockAnchorMs   = millis();
   }
 }
 
@@ -149,6 +157,12 @@ ScoreboardState wsGetScoreboard() {
   s.left  = deriveVoteDisplay(g_rawVotes.left);
   s.right = deriveVoteDisplay(g_rawVotes.right);
   s.chief = deriveVoteDisplay(g_rawVotes.chief);
+
   s.clock = g_clock;
+  if (g_clock.state == "RUNNING") {
+    float elapsedSec = (millis() - g_clockAnchorMs) / 1000.0f;
+    s.clock.remaining = g_clock.remaining - elapsedSec;
+    if (s.clock.remaining < 0) s.clock.remaining = 0;
+  }
   return s;
 }
