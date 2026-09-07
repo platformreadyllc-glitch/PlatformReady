@@ -23,6 +23,38 @@ static unsigned long lastActivityMs = 0;
 static unsigned long disconnectedSinceMs = 0;
 static bool wasDisconnected = false;
 static unsigned long lastScoreboardTick = 0;
+static unsigned long lastStatusChangeMs = 0;
+// How long a transient status word (WHITE, ERR, CLOCK, ...) stays on
+// screen before the scoreboard's bottom line reverts to showing the
+// remote's platform/position instead - see refreshDisplay().
+static const unsigned long STATUS_DISPLAY_MS = 5000;
+
+// All lastStatus writes should go through this, not a bare assignment -
+// refreshDisplay() needs to know *when* it changed, not just its value.
+static void setStatus(const String& s) {
+  lastStatus = s;
+  lastStatusChangeMs = millis();
+}
+
+// "platform-1"/"chief" -> "P:1 - Chief". Strips a leading "platform"/
+// "platform-" prefix (case-insensitive) if present so the common naming
+// scheme abbreviates cleanly; falls back to the full platformId
+// otherwise rather than assuming every platform follows that convention.
+static String formatPlatformRole(const String& platformId, const String& role) {
+  String lower = platformId;
+  lower.toLowerCase();
+  String shortId = platformId;
+  if (lower.startsWith("platform-")) {
+    shortId = platformId.substring(9);
+  } else if (lower.startsWith("platform")) {
+    shortId = platformId.substring(8);
+  }
+  String roleCap = role;
+  if (roleCap.length() > 0) {
+    roleCap.setCharAt(0, toupper(roleCap[0]));
+  }
+  return "P:" + shortId + " - " + roleCap;
+}
 
 static ScoreVote toScoreVote(const RefereeVoteDisplay& v) {
   ScoreVote sv;
@@ -49,7 +81,13 @@ static void refreshDisplay() {
     return;
   }
   ScoreboardState s = wsGetScoreboard();
-  displayShowScoreboard(lastStatus, toScoreVote(s.left), toScoreVote(s.chief),
+  // A transient status (just voted, just pressed clock, ERR) is only
+  // useful briefly - once it's stale, showing the remote's own platform/
+  // position is more useful than a permanently-stuck "READY".
+  bool statusFresh = millis() - lastStatusChangeMs < STATUS_DISPLAY_MS;
+  String bottomText = statusFresh ? lastStatus
+                                   : formatPlatformRole(cfg.platformId, cfg.role);
+  displayShowScoreboard(bottomText, toScoreVote(s.left), toScoreVote(s.chief),
                          toScoreVote(s.right), s.clock.remaining);
 }
 
@@ -200,7 +238,7 @@ void loop() {
     // OK: freshly registered.  SERVER_ERROR: probably already registered — proceed anyway.
     if (state.result == ApiResult::OK || state.result == ApiResult::SERVER_ERROR) {
       registered  = true;
-      lastStatus  = "READY";
+      setStatus("READY");
 
       // Adopt the backend's current platform/role assignment (if any) —
       // assignment happens via the remote management page, not at setup
@@ -261,7 +299,7 @@ void loop() {
     cfg.role       = newRole;
     configSave(cfg);
     apiSetPlatformId(newPlatformId);
-    lastStatus = "READY";
+    setStatus("READY");
     refreshDisplay();
     hapticDoubleClick();
     Serial.printf("[loop] assignment changed: platform=%s role=%s\n",
@@ -280,10 +318,10 @@ void loop() {
     hapticPulse(40);
     ApiResult r = apiCastVote(voteNames[i]);
     if (r == ApiResult::OK) {
-      lastStatus = voteLabels[i];
+      setStatus(voteLabels[i]);
       hapticDoubleClick();
     } else {
-      lastStatus = "ERR";
+      setStatus("ERR");
       hapticError();
     }
     refreshDisplay();
@@ -296,10 +334,10 @@ void loop() {
     hapticPulse(40);
     ApiResult r = apiPressClockButton();
     if (r == ApiResult::OK) {
-      lastStatus = "CLOCK";
+      setStatus("CLOCK");
       hapticDoubleClick();
     } else {
-      lastStatus = "ERR";
+      setStatus("ERR");
       hapticError();
     }
     refreshDisplay();
