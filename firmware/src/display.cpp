@@ -100,17 +100,15 @@ static String formatClock(float remainingSeconds) {
   return String(buf);
 }
 
-// One referee's circle: role letter above, a ring (single line = not
-// voted yet, concentric double line = voted but not yet revealed), and
-// once revealed a hand-drawn checkmark (white/good) or X with the
-// infraction letter below (no font here has check/X glyphs - confirmed
-// against u8g2's font tables, all Latin-1-only).
-static void drawScoreColumn(int centerX, const char* label, const ScoreVote& vote) {
-  const int cy = 48;
-  const int r  = 8;
-
-  u8g2.setFont(u8g2_font_6x10_tf);
-  u8g2.drawStr(centerX - u8g2.getStrWidth(label) / 2, 38, label);
+// One referee's circle: a ring (single line = not voted yet, concentric
+// double line = voted but not yet revealed), and once revealed a
+// hand-drawn checkmark (white/good) or X with the infraction letter below
+// (no font here has check/X glyphs - confirmed against u8g2's font
+// tables, all Latin-1-only). No role label above it — removed per user
+// feedback to free up vertical space.
+static void drawScoreColumn(int centerX, const ScoreVote& vote) {
+  const int cy = 13;
+  const int r  = 10;
 
   u8g2.drawCircle(centerX, cy, r);
 
@@ -122,37 +120,44 @@ static void drawScoreColumn(int centerX, const char* label, const ScoreVote& vot
       break;
     case ScoreVoteState::REVEALED:
       if (vote.button == "white") {
-        u8g2.drawLine(centerX - 4, cy, centerX - 1, cy + 4);
-        u8g2.drawLine(centerX - 1, cy + 4, centerX + 5, cy - 5);
+        u8g2.drawLine(centerX - 5, cy, centerX - 1, cy + 5);
+        u8g2.drawLine(centerX - 1, cy + 5, centerX + 6, cy - 6);
       } else {
-        u8g2.drawLine(centerX - 5, cy - 5, centerX + 5, cy + 5);
-        u8g2.drawLine(centerX - 5, cy + 5, centerX + 5, cy - 5);
+        u8g2.drawLine(centerX - 6, cy - 6, centerX + 6, cy + 6);
+        u8g2.drawLine(centerX - 6, cy + 6, centerX + 6, cy - 6);
         char letter = 'R';
         if (vote.button == "blue") letter = 'B';
         else if (vote.button == "yellow") letter = 'Y';
         char buf[2] = { letter, '\0' };
-        u8g2.drawStr(centerX - u8g2.getStrWidth(buf) / 2, 63, buf);
+        u8g2.setFont(u8g2_font_6x10_tf);
+        u8g2.drawStr(centerX - u8g2.getStrWidth(buf) / 2, 32, buf);
       }
       break;
   }
 }
 
+// The panel is physically two-color (confirmed on hardware: with this
+// project's U8G2_R2 rotation, the top ~48 rows render on the blue segment,
+// the bottom ~16 on yellow) - live/frequently-changing info (votes, clock)
+// stays in the blue area, general/status info in the yellow strip at the
+// bottom, matching the real scoring page's own vote-circles-above-clock
+// layout.
 void displayShowScoreboard(const String& status, const ScoreVote& left,
                             const ScoreVote& chief, const ScoreVote& right,
                             float clockRemaining) {
   if (!g_displayPresent) return;
   u8g2.clearBuffer();
 
-  u8g2.setFont(u8g2_font_6x10_tf);
-  u8g2.drawStr(0, 9, status.c_str());
+  drawScoreColumn(21, left);
+  drawScoreColumn(64, chief);
+  drawScoreColumn(107, right);
 
   u8g2.setFont(u8g2_font_9x18B_tf);
   String clockStr = formatClock(clockRemaining);
-  u8g2.drawStr((128 - u8g2.getStrWidth(clockStr.c_str())) / 2, 28, clockStr.c_str());
+  u8g2.drawStr((128 - u8g2.getStrWidth(clockStr.c_str())) / 2, 47, clockStr.c_str());
 
-  drawScoreColumn(21, "L", left);
-  drawScoreColumn(64, "C", chief);
-  drawScoreColumn(107, "R", right);
+  u8g2.setFont(u8g2_font_6x10_tf);
+  u8g2.drawStr((128 - u8g2.getStrWidth(status.c_str())) / 2, 58, status.c_str());
 
   u8g2.sendBuffer();
 }
