@@ -88,7 +88,8 @@ static void refreshDisplay() {
   String bottomText = statusFresh ? lastStatus
                                    : formatPlatformRole(cfg.platformId, cfg.role);
   displayShowScoreboard(bottomText, toScoreVote(s.left), toScoreVote(s.chief),
-                         toScoreVote(s.right), s.clock.remaining);
+                         toScoreVote(s.right), s.clock.remaining,
+                         networkIsEthernet());
 }
 
 // ── WiFiManager portal with custom params for full config ────────────────────

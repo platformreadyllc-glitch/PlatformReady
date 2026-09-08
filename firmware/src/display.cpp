@@ -148,7 +148,7 @@ static void drawScoreColumn(int centerX, const ScoreVote& vote) {
 // layout.
 void displayShowScoreboard(const String& status, const ScoreVote& left,
                             const ScoreVote& chief, const ScoreVote& right,
-                            float clockRemaining) {
+                            float clockRemaining, bool isEthernet) {
   if (!g_displayPresent) return;
   u8g2.clearBuffer();
 
@@ -162,6 +162,12 @@ void displayShowScoreboard(const String& status, const ScoreVote& left,
 
   u8g2.setFont(u8g2_font_6x10_tf);
   u8g2.drawStr((128 - u8g2.getStrWidth(status.c_str())) / 2, 58, status.c_str());
+
+  // Connection-type indicator, bottom-right corner of the yellow strip.
+  // A hand-drawn wifi/ethernet glyph would be unreadable at this scale on
+  // this resolution - plain text reads reliably instead.
+  const char* connLabel = isEthernet ? "eth" : "wifi";
+  u8g2.drawStr(128 - u8g2.getStrWidth(connLabel) - 1, 58, connLabel);
 
   u8g2.sendBuffer();
 }

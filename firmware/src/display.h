@@ -20,7 +20,7 @@ struct ScoreVote {
 
 void displayShowScoreboard(const String& status, const ScoreVote& left,
                             const ScoreVote& chief, const ScoreVote& right,
-                            float clockRemaining);
+                            float clockRemaining, bool isEthernet);
 
 // OTA update status screens (see ota.cpp).
 void displayShowOtaChecking();
