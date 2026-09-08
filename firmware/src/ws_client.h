@@ -40,6 +40,7 @@ struct PlatformClockDisplay {
   String mode;
   String state;
   float remaining = 0;
+  float duration  = 0;
 };
 
 struct ScoreboardState {
@@ -55,3 +56,14 @@ struct ScoreboardState {
 // delay is timed internally against millis(), not tied to any single
 // incoming message.
 ScoreboardState wsGetScoreboard();
+
+// Call right after this remote's own clock-button press succeeds
+// (apiPressClockButton() returns OK), before the WS push confirming it
+// has necessarily arrived back - that confirmation is a separate,
+// independently-timed round-trip over the network, and waiting on it
+// visibly lags a button press on the very device that made it. Mirrors
+// the backend's own toggle semantics (handleChiefClockPress): flips
+// RUNNING<->IDLE and resets remaining to the last-known duration, using
+// data already cached locally from the last real push - the next real
+// push (arriving shortly after) just reconfirms the same values.
+void wsOptimisticClockToggle();

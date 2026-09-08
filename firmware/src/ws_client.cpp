@@ -90,6 +90,7 @@ static void handleTextFrame(uint8_t* payload, size_t length) {
     g_clock.mode      = clockMode ? clockMode : "";
     g_clock.state     = clockState ? clockState : "";
     g_clock.remaining = doc["clock"]["remaining"] | 0.0f;
+    g_clock.duration  = doc["clock"]["duration"]  | 0.0f;
     g_clockAnchorMs   = millis();
   }
 }
@@ -165,4 +166,10 @@ ScoreboardState wsGetScoreboard() {
     if (s.clock.remaining < 0) s.clock.remaining = 0;
   }
   return s;
+}
+
+void wsOptimisticClockToggle() {
+  g_clock.state     = (g_clock.state == "RUNNING") ? "IDLE" : "RUNNING";
+  g_clock.remaining = g_clock.duration;
+  g_clockAnchorMs   = millis();
 }

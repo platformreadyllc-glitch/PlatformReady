@@ -335,6 +335,9 @@ void loop() {
     ApiResult r = apiPressClockButton();
     if (r == ApiResult::OK) {
       setStatus("CLOCK");
+      // Don't wait on the WS push to confirm what this remote's own
+      // button press just did - see wsOptimisticClockToggle().
+      wsOptimisticClockToggle();
       hapticDoubleClick();
     } else {
       setStatus("ERR");
