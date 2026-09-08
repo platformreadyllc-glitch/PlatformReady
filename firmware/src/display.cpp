@@ -88,11 +88,15 @@ void displayShowActive(const String& platformId, const String& role, const Strin
 
 // Formats seconds as "M:SS" (no leading zero on minutes - clocks here
 // range from a 60s attempt up to a 20min break, never triple-digit
-// minutes). Negative input (shouldn't happen - backend clamps to 0)
-// still renders sensibly rather than a garbled negative string.
+// minutes). Truncates rather than rounds - matches the frontend's own
+// formatTime() (frontend/src/lib/platformHelpers.ts, Math.floor) exactly,
+// which is what makes a fresh 60s clock read "0:59" almost immediately
+// rather than sitting on "1:00" for most of the first second. Negative
+// input (shouldn't happen - backend clamps to 0) still renders sensibly
+// rather than a garbled negative string.
 static String formatClock(float remainingSeconds) {
   if (remainingSeconds < 0) remainingSeconds = 0;
-  int totalSeconds = (int)(remainingSeconds + 0.5f);
+  int totalSeconds = (int)remainingSeconds;
   int minutes = totalSeconds / 60;
   int seconds = totalSeconds % 60;
   char buf[8];
