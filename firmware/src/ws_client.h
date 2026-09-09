@@ -4,8 +4,12 @@
 // Opens the persistent WS connection to the backend and registers the
 // event handler. Call once after a successful registration (main.cpp),
 // once remoteId (cfg.serial) is known — see esp-remotes.gateway.ts, which
-// validates remoteId at connect time.
-void wsInit(const String& remoteId);
+// validates remoteId at connect time. isEthernet is reported once as a
+// `?transport=` query param so the backend/frontend can show which
+// network interface this remote is on - purely informational, doesn't
+// affect the connection itself (which is WiFi-only regardless, see
+// firmware/README.md).
+void wsInit(const String& remoteId, bool isEthernet);
 
 // Non-blocking - pumps the WS connection's state machine (connect/
 // reconnect, heartbeat, incoming frames). Safe to call every loop()

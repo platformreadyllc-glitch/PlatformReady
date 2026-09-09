@@ -266,8 +266,8 @@ void loop() {
       otaMarkValid();
 
       // Opens the persistent connection used for liveness, live assignment
-      // sync, and (eventually) the mini-scoreboard - see ws_client.h.
-      wsInit(cfg.serial);
+      // sync, and the mini-scoreboard - see ws_client.h.
+      wsInit(cfg.serial, networkIsEthernet());
 
       // Don't make freshly-booted devices wait up to OTA_CHECK_INTERVAL_MS
       // for their first update check.

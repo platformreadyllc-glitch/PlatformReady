@@ -111,8 +111,9 @@ static void wsEvent(WStype_t type, uint8_t* payload, size_t length) {
   }
 }
 
-void wsInit(const String& remoteId) {
-  String url = "/esp32-ws?remoteId=" + remoteId;
+void wsInit(const String& remoteId, bool isEthernet) {
+  String url = "/esp32-ws?remoteId=" + remoteId +
+               "&transport=" + (isEthernet ? "ethernet" : "wifi");
   webSocket.begin(apiGetHost(), apiGetPort(), url);
   webSocket.onEvent(wsEvent);
   webSocket.setReconnectInterval(5000);
