@@ -11,6 +11,29 @@ export interface StoredMeetConfig {
 export type VoteButton = 'white' | 'red' | 'blue' | 'yellow'
 export type Role = 'left' | 'chief' | 'right'
 
+// Shared position convention used everywhere a referee slot is labeled by
+// letter — remote management's role slots, and (per this label+color) the
+// live connection badges on the platform display / director view.
+export const ROLE_LABEL: Record<Role, string> = { left: 'L', chief: 'C', right: 'R' }
+export const ROLE_COLOR: Record<Role, string> = {
+  left: 'text-blue-400',
+  chief: 'text-yellow-400',
+  right: 'text-red-400',
+}
+
+export type Transport = 'wifi' | 'ethernet' | null
+
+export interface RemoteConnection {
+  connected: boolean
+  transport: Transport
+}
+
+// kb-* remotes are the frontend's own virtual keyboard-simulated referees,
+// not physical hardware - they never have a real connection to report.
+export function isKbRemote(remoteId: string): boolean {
+  return remoteId.startsWith('kb-')
+}
+
 export type ClockMode = 'ACTIVE' | 'BREAK'
 export type ClockState = 'IDLE' | 'RUNNING' | 'EXPIRED'
 

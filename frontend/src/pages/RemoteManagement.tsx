@@ -11,9 +11,11 @@ import {
 } from '@dnd-kit/core'
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core'
 import { io, Socket } from 'socket.io-client'
+import { Wifi, EthernetPort } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { API } from '@/hooks/usePlatformSocket'
 import { readActivePlatforms } from '@/lib/platformHelpers'
+import type { Transport } from '@/lib/platformTypes'
 
 type HardwareType = 'side' | 'chief'
 
@@ -24,6 +26,7 @@ interface RemoteSerialized {
   hasVibration: boolean
   hasDisplay: boolean
   connected: boolean
+  transport: Transport
 }
 
 interface PoolEntry extends RemoteSerialized {
@@ -101,16 +104,18 @@ function blockedReason(role: string): string {
   return role === 'chief' ? 'chief hardware only' : 'side hardware only'
 }
 
-// Same red/green dot convention as PlatformCard.tsx's own socket-connected
-// indicator, reused here for each physical remote's live WS status. kb-*
-// (virtual/keyboard) remotes never open a WS connection at all, so callers
-// skip rendering this for them rather than showing a permanently-red dot.
-function ConnectedDot({ connected }: { connected: boolean }) {
+// Icon shape reflects the transport (wifi vs ethernet), color reflects
+// connected (green) vs disconnected (red) - same convention as
+// RemoteConnectionBadge.tsx, minus the L/C/R letter (redundant here since
+// role is already shown elsewhere on this page). kb-* (virtual/keyboard)
+// remotes never open a WS connection at all, so callers skip rendering
+// this for them rather than showing a permanently-red icon.
+function ConnectedDot({ connected, transport }: { connected: boolean; transport: Transport }) {
+  const Icon = transport === 'ethernet' ? EthernetPort : Wifi
   return (
-    <span
-      className={`w-1.5 h-1.5 rounded-full shrink-0 ${connected ? 'bg-green-500' : 'bg-red-500'}`}
-      title={connected ? 'Connected' : 'Disconnected'}
-    />
+    <span title={connected ? 'Connected' : 'Disconnected'} className="shrink-0 leading-none">
+      <Icon size={12} className={connected ? 'text-green-500' : 'text-red-500'} />
+    </span>
   )
 }
 
@@ -138,7 +143,7 @@ function ActiveRemote({ remote, platformId }: { remote: RemoteSerialized; platfo
     >
       <div className="flex items-center gap-1.5 min-w-0">
         <span className="text-xs font-mono text-primary font-medium truncate">{remote.remoteId}</span>
-        {!isKb(remote.remoteId) && <ConnectedDot connected={remote.connected} />}
+        {!isKb(remote.remoteId) && <ConnectedDot connected={remote.connected} transport={remote.transport} />}
       </div>
       <span className="text-xs text-secondary">{remoteLabel(remote, !isDragging)}</span>
     </div>
@@ -244,7 +249,7 @@ function PoolRemote({ entry }: { entry: PoolEntry }) {
     >
       <div className="flex items-center gap-1.5">
         <span className="text-xs font-mono text-primary font-medium">{entry.remoteId}</span>
-        {!isKb(entry.remoteId) && <ConnectedDot connected={entry.connected} />}
+        {!isKb(entry.remoteId) && <ConnectedDot connected={entry.connected} transport={entry.transport} />}
       </div>
       <span className="text-xs text-secondary">{remoteLabel(entry, false)}</span>
     </div>

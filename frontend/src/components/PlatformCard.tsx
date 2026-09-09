@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { RefereeLight } from '@/components/RefereeLight'
+import { RemoteConnectionBadge } from '@/components/RemoteConnectionBadge'
 import { formatTime } from '@/lib/platformHelpers'
 import { usePlatformState } from '@/hooks/usePlatformState'
 
@@ -20,6 +21,7 @@ export function PlatformCard({ numericId }: { numericId: number }) {
     clock,
     connected,
     attemptChangeActive,
+    remoteStatus,
     startBreakCountdown,
     toggleAttemptChange,
   } = usePlatformState(id, false)
@@ -89,10 +91,13 @@ export function PlatformCard({ numericId }: { numericId: number }) {
       {/* Display area */}
       <div className="flex flex-col items-center justify-center gap-3 py-6 px-4">
         {clock.mode === 'ACTIVE' && (
-          <div className="flex items-center gap-4">
-            <RefereeLight vote={votes.left} revealed={revealed} compact />
-            <RefereeLight vote={votes.chief} revealed={revealed} compact />
-            <RefereeLight vote={votes.right} revealed={revealed} compact />
+          <div className="flex items-start gap-4">
+            {(['left', 'chief', 'right'] as const).map((role) => (
+              <div key={role} className="flex flex-col items-center gap-1">
+                {remoteStatus[role] && <RemoteConnectionBadge role={role} status={remoteStatus[role]} size={12} />}
+                <RefereeLight vote={votes[role]} revealed={revealed} compact />
+              </div>
+            ))}
           </div>
         )}
 

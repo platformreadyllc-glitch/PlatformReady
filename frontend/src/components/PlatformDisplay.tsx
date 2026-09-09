@@ -1,6 +1,7 @@
 import { RefereeLight } from '@/components/RefereeLight'
+import { RemoteConnectionBadge } from '@/components/RemoteConnectionBadge'
 import { formatTime } from '@/lib/platformHelpers'
-import type { ClockSnapshot, Role, VoteButton } from '@/lib/platformTypes'
+import type { ClockSnapshot, RemoteConnection, Role, VoteButton } from '@/lib/platformTypes'
 import AttemptChangeOverlay from '@/components/AttemptChangeOverlay'
 
 interface Props {
@@ -10,9 +11,18 @@ interface Props {
   revealed: boolean
   clock: ClockSnapshot
   attemptChangeActive: boolean
+  remoteStatus: Record<Role, RemoteConnection | null>
 }
 
-export function PlatformDisplay({ platformName, dayStr, votes, revealed, clock, attemptChangeActive }: Props) {
+export function PlatformDisplay({
+  platformName,
+  dayStr,
+  votes,
+  revealed,
+  clock,
+  attemptChangeActive,
+  remoteStatus,
+}: Props) {
   const clockColorClass =
     clock.state === 'EXPIRED' ? 'text-red-500' :
       clock.remaining <= 30 ? 'text-yellow-400' :
@@ -38,9 +48,12 @@ export function PlatformDisplay({ platformName, dayStr, votes, revealed, clock, 
         /* ── ACTIVE mode: lights + single clock ── */
         <div className="flex-1 flex flex-col items-center justify-center">
           <div className="flex items-start gap-[6vw]">
-            <RefereeLight vote={votes.left} revealed={revealed} />
-            <RefereeLight vote={votes.chief} revealed={revealed} />
-            <RefereeLight vote={votes.right} revealed={revealed} />
+            {(['left', 'chief', 'right'] as const).map((role) => (
+              <div key={role} className="flex flex-col items-center gap-2">
+                {remoteStatus[role] && <RemoteConnectionBadge role={role} status={remoteStatus[role]} size={18} />}
+                <RefereeLight vote={votes[role]} revealed={revealed} />
+              </div>
+            ))}
           </div>
           <span className={`text-[15vw] [font-family:'DSEG7ClassicBold',monospace] font-bold tabular-nums ${clockColorClass}`}>
             {formatTime(clock.remaining)}
