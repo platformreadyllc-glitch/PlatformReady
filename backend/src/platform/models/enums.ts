@@ -23,3 +23,9 @@ export type Decision = 'good' | 'bad';
 // `role`, which is the current platform/position assignment.
 export const VALID_HARDWARE_TYPES = new Set(['side', 'chief']);
 export type HardwareType = 'side' | 'chief';
+
+// Which network interface a remote's live WS connection is currently
+// riding, reported once at connect time (see esp-remotes.gateway.ts /
+// firmware's wsInit()). null until the remote has connected at least once
+// under firmware that reports it.
+export type Transport = 'wifi' | 'ethernet' | null;

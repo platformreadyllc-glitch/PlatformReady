@@ -195,6 +195,20 @@ describe('PlatformService ESP32 WS integration', () => {
     expect(gw.emitPlatformUpdate).not.toHaveBeenCalled();
   });
 
+  it('markRemoteConnected records the reported transport', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw, makeLc());
+    svc.ensurePlatform({ platformId: 'p1' });
+
+    svc.markRemoteConnected('kb-left', 'ethernet');
+    expect(svc.findRemote('kb-left')?.transport).toBe('ethernet');
+
+    // A later connect without a transport (shouldn't happen in practice)
+    // doesn't erase the last-known value.
+    svc.markRemoteConnected('kb-left');
+    expect(svc.findRemote('kb-left')?.transport).toBe('ethernet');
+  });
+
   it('castVote broadcasts the platform votes+clock to ESP32 remotes via espGateway', () => {
     const gw = makeGateway();
     const esp = makeEspGateway();

@@ -8,7 +8,7 @@ import {
 import { HttpAdapterHost } from '@nestjs/core';
 import { WebSocketServer, WebSocket } from 'ws';
 import { PlatformService } from './platform.service';
-import { Role, Button } from './models/enums';
+import { Role, Button, Transport } from './models/enums';
 import { PlatformClockSerialized } from './models/platform-clock';
 
 type LiveSocket = WebSocket & { isAlive?: boolean };
@@ -47,18 +47,23 @@ export class EspRemotesGateway
     this.wss = new WebSocketServer({ server: httpServer, path: '/esp32-ws' });
 
     this.wss.on('connection', (ws: LiveSocket, req) => {
-      const remoteId = new URL(
-        req.url ?? '',
-        'http://esp32-ws.local',
-      ).searchParams.get('remoteId');
+      const params = new URL(req.url ?? '', 'http://esp32-ws.local')
+        .searchParams;
+      const remoteId = params.get('remoteId');
 
       if (!remoteId || !this.platformService.findRemote(remoteId)) {
         ws.close(4000, 'unknown remote');
         return;
       }
 
+      const rawTransport = params.get('transport');
+      const transport: Transport =
+        rawTransport === 'wifi' || rawTransport === 'ethernet'
+          ? rawTransport
+          : null;
+
       this.connections.set(remoteId, ws);
-      this.platformService.markRemoteConnected(remoteId);
+      this.platformService.markRemoteConnected(remoteId, transport);
 
       ws.isAlive = true;
       ws.on('pong', () => {

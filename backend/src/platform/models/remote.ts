@@ -1,4 +1,4 @@
-import { Role, Button, HardwareType } from './enums';
+import { Role, Button, HardwareType, Transport } from './enums';
 
 export interface RemoteSerialized {
   remoteId: string;
@@ -13,6 +13,7 @@ export interface RemoteSerialized {
   buttonCount: number;
   availableButtons: Button[];
   connected: boolean;
+  transport: Transport;
   batteryLevel: number | null;
   lastButtonPressed: Button | null;
   displayText: string;
@@ -27,6 +28,7 @@ export class Remote {
   hasVibration: boolean;
   hasDisplay: boolean;
   connected: boolean = false;
+  transport: Transport = null;
   batteryLevel: number | null = null;
   lastButtonPressed: Button | null = null;
   displayText: string = '';
@@ -73,8 +75,12 @@ export class Remote {
     this.lastButtonPressed = buttonName;
   }
 
-  connect(): void {
+  connect(transport?: Transport): void {
     this.connected = true;
+    // Only overwrite on an actual report - a reconnect that doesn't carry
+    // the param (shouldn't happen in practice, but keep this defensive)
+    // shouldn't erase the last-known value.
+    if (transport !== undefined) this.transport = transport;
   }
 
   disconnect(): void {
@@ -107,6 +113,7 @@ export class Remote {
       buttonCount: this.buttonCount,
       availableButtons: this.availableButtons,
       connected: this.connected,
+      transport: this.transport,
       batteryLevel: this.batteryLevel,
       lastButtonPressed: this.lastButtonPressed,
       displayText: this.displayText,
