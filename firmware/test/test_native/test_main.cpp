@@ -8,6 +8,7 @@
 #include "../../src/host_port.h"
 #include "../../src/url_utils.h"
 #include "../../src/scoreboard.h"
+#include "../../src/transport_fsm.h"
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -186,6 +187,80 @@ void test_toggleClock_noop_without_known_duration(void) {
   TEST_ASSERT_FALSE(t.changed);  // no real clock data yet
 }
 
+// ── transport_fsm.cpp: runtime Ethernet<->WiFi switch decision ────────────
+
+void test_transportDecide_debounces_flicker_no_switch(void) {
+  bool lastLinkUp = true;
+  unsigned long stableSince = 0, lastRecheck = 0;
+
+  // Link drops at t=1000 - not stable yet, no switch.
+  TEST_ASSERT_EQUAL(TransportAction::STAY,
+                    transportDecide(true, false, lastLinkUp, stableSince,
+                                    lastRecheck, 1000));
+  // Still within the debounce window.
+  TEST_ASSERT_EQUAL(TransportAction::STAY,
+                    transportDecide(true, false, lastLinkUp, stableSince,
+                                    lastRecheck, 1500));
+  // Link recovers before the debounce window elapsed - flicker suppressed.
+  TEST_ASSERT_EQUAL(TransportAction::STAY,
+                    transportDecide(true, true, lastLinkUp, stableSince,
+                                    lastRecheck, 1900));
+  TEST_ASSERT_TRUE(lastLinkUp);
+}
+
+void test_transportDecide_switch_to_wifi_after_stable_loss(void) {
+  bool lastLinkUp = true;
+  unsigned long stableSince = 0, lastRecheck = 0;
+
+  TEST_ASSERT_EQUAL(TransportAction::STAY,
+                    transportDecide(true, false, lastLinkUp, stableSince,
+                                    lastRecheck, 1000));
+  // 1000ms later, still down - debounce elapsed.
+  TEST_ASSERT_EQUAL(TransportAction::SWITCH_TO_WIFI,
+                    transportDecide(true, false, lastLinkUp, stableSince,
+                                    lastRecheck, 2000));
+}
+
+void test_transportDecide_switch_to_ethernet_after_stable_link_and_rate_limit(void) {
+  bool lastLinkUp = false;
+  unsigned long stableSince = 0, lastRecheck = 0;
+
+  // Link comes up at t=1000 - not stable yet.
+  TEST_ASSERT_EQUAL(TransportAction::STAY,
+                    transportDecide(false, true, lastLinkUp, stableSince,
+                                    lastRecheck, 1000));
+  // Stable (1000ms since the edge), but the 5s recheck interval hasn't
+  // elapsed since lastRecheck (still 0).
+  TEST_ASSERT_EQUAL(TransportAction::STAY,
+                    transportDecide(false, true, lastLinkUp, stableSince,
+                                    lastRecheck, 2000));
+  // Recheck interval elapsed - signals the switch and updates lastRecheck.
+  TEST_ASSERT_EQUAL(TransportAction::SWITCH_TO_ETHERNET,
+                    transportDecide(false, true, lastLinkUp, stableSince,
+                                    lastRecheck, 6000));
+  TEST_ASSERT_EQUAL_UINT32(6000, lastRecheck);
+  // Immediately after - still stable and link up, but rate-limited again.
+  TEST_ASSERT_EQUAL(TransportAction::STAY,
+                    transportDecide(false, true, lastLinkUp, stableSince,
+                                    lastRecheck, 6100));
+}
+
+void test_transportDecide_stays_when_already_on_matching_transport(void) {
+  bool lastLinkUp = true;
+  unsigned long stableSince = 0, lastRecheck = 0;
+
+  // On Ethernet, link healthy - nothing to do.
+  TEST_ASSERT_EQUAL(TransportAction::STAY,
+                    transportDecide(true, true, lastLinkUp, stableSince,
+                                    lastRecheck, 5000));
+
+  lastLinkUp = false;
+  // On WiFi, no cable present - nothing to do.
+  TEST_ASSERT_EQUAL(TransportAction::STAY,
+                    transportDecide(false, false, lastLinkUp, stableSince,
+                                    lastRecheck, 5000));
+}
+
 int main(int argc, char** argv) {
   UNITY_BEGIN();
 
@@ -218,6 +293,11 @@ int main(int argc, char** argv) {
   RUN_TEST(test_clockParts_truncates);
   RUN_TEST(test_toggleClock_flips_and_resets_to_duration);
   RUN_TEST(test_toggleClock_noop_without_known_duration);
+
+  RUN_TEST(test_transportDecide_debounces_flicker_no_switch);
+  RUN_TEST(test_transportDecide_switch_to_wifi_after_stable_loss);
+  RUN_TEST(test_transportDecide_switch_to_ethernet_after_stable_link_and_rate_limit);
+  RUN_TEST(test_transportDecide_stays_when_already_on_matching_transport);
 
   return UNITY_END();
 }
