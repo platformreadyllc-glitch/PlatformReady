@@ -174,7 +174,10 @@ void setup() {
     if (forceConfig) {
       webConfigRunEthernet(cfg);
     }
-    networkBeginWiFi();
+    // Decision: when Ethernet is up at boot, WiFi is never associated at
+    // all - no networkBeginWiFi(), no runWiFiManager(). The radio stays
+    // idle/unassociated but powered. (Runtime fallback to WiFi if the
+    // cable is later lost is handled separately, in loop().)
   } else {
     networkBeginWiFi();
     Serial.println("[boot] runWiFiManager");

@@ -58,14 +58,41 @@ bool networkTryEthernet() {
 }
 
 bool networkBeginWiFi() {
-  g_ethernet = false;
   // Modem-sleep power saving is a common cause of silent ESP32 WiFi
   // drops; setAutoReconnect tells the driver to attempt reconnection on
   // its own when a disconnect event fires. Both are driver-level — the
   // active retry in main.cpp's loop() is still needed as a backstop for
   // disconnects the driver doesn't auto-recover from on its own.
+  //
+  // Deliberately does NOT touch g_ethernet - it used to unconditionally
+  // reset it to false, which broke Ethernet even when this was called
+  // only to configure the WiFi radio on the WiFi-only boot path. It's
+  // safe to call regardless of current transport now.
   WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
+  return true;
+}
+
+// The only place that flips g_ethernet back to false at runtime (after
+// boot's initial networkTryEthernet()/g_ethernet=true). Called from
+// exactly one place: main.cpp's loop() runtime Ethernet-loss-to-WiFi
+// fallback transition - never at boot, where the WiFi-only path simply
+// never sets g_ethernet true in the first place.
+bool networkFallbackToWiFi() {
+  g_ethernet = false;
+  return true;
+}
+
+// Non-interactive WiFi association for the runtime fallback path: a bare
+// WiFi.begin() reconnects using ESP32-IDF-NVS-persisted STA credentials
+// (the same pattern WiFiManager's own wifiConnectDefault() uses
+// internally), rather than blocking on the captive-portal UI - which
+// would be wrong for a headless mid-meet remote. Non-blocking: kicks off
+// the association attempt and returns immediately; the actual connection
+// is observed later via networkConnected()/WiFi.status(), same as the
+// existing WiFi.reconnect() backstop in main.cpp's loop().
+bool networkAssociateWiFiNonInteractive() {
+  WiFi.begin();
   return true;
 }
 

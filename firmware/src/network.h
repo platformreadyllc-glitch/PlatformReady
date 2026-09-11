@@ -6,7 +6,22 @@
 // Returns false only if Ethernet DHCP failed with a cable present.
 // For WiFi, always returns true (WiFiManager blocks until connected or portal is dismissed).
 bool networkTryEthernet();
+
+// Configures the WiFi radio's power/reconnect behavior. Safe to call
+// regardless of current transport - does not touch which transport is
+// active (see networkFallbackToWiFi() for that).
 bool networkBeginWiFi();
+
+// Runtime-only: switches the active transport to WiFi (flips
+// networkIsEthernet() to false). Called when the Ethernet link is lost
+// mid-operation and the device needs to fail over - never called at boot.
+bool networkFallbackToWiFi();
+
+// Runtime-only: kicks off a non-interactive WiFi association attempt
+// (bare WiFi.begin(), using NVS-persisted credentials) as part of the
+// same fallback transition. Non-blocking - does not wait for the
+// connection to complete.
+bool networkAssociateWiFiNonInteractive();
 
 bool networkIsEthernet();
 bool networkConnected();
