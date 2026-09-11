@@ -40,7 +40,23 @@ export function PlatformDisplay({
     <>
       {/* Header */}
       <header className="flex items-center justify-between px-8 py-1 border-b border-border">
-        <span className="text-[1.5vw] font-semibold text-primary tracking-wide">{platformName}</span>
+        <div className="flex items-center gap-[2vw]">
+          <span className="text-[1.5vw] font-semibold text-primary tracking-wide">{platformName}</span>
+          <div className="flex items-center gap-[1.2vw]">
+            {(['left', 'chief', 'right'] as const).map(
+              (role) =>
+                remoteStatus[role] && (
+                  <RemoteConnectionBadge
+                    key={role}
+                    role={role}
+                    status={remoteStatus[role]}
+                    size={22}
+                    labelClass="text-[1vw]"
+                  />
+                ),
+            )}
+          </div>
+        </div>
         <span className="text-[1.2vw] text-secondary">{dayStr}</span>
       </header>
 
@@ -48,12 +64,9 @@ export function PlatformDisplay({
         /* ── ACTIVE mode: lights + single clock ── */
         <div className="flex-1 flex flex-col items-center justify-center">
           <div className="flex items-start gap-[6vw]">
-            {(['left', 'chief', 'right'] as const).map((role) => (
-              <div key={role} className="flex flex-col items-center gap-2">
-                {remoteStatus[role] && <RemoteConnectionBadge role={role} status={remoteStatus[role]} size={18} />}
-                <RefereeLight vote={votes[role]} revealed={revealed} />
-              </div>
-            ))}
+            <RefereeLight vote={votes.left} revealed={revealed} />
+            <RefereeLight vote={votes.chief} revealed={revealed} />
+            <RefereeLight vote={votes.right} revealed={revealed} />
           </div>
           <span className={`text-[15vw] [font-family:'DSEG7ClassicBold',monospace] font-bold tabular-nums ${clockColorClass}`}>
             {formatTime(clock.remaining)}

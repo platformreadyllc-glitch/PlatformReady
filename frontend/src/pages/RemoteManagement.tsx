@@ -330,8 +330,13 @@ export default function RemoteManagement() {
       if (!poolRes.ok) throw new Error(`HTTP ${poolRes.status}`)
 
       const byId: Record<string, PlatformFull> = await platformsRes.json()
-      const all = Object.values(byId)
-      const shown = activePlatformIds.length > 0 ? all.filter((p) => activePlatformIds.includes(p.platformId)) : all
+      // Order by activePlatformIds (platform-1, -2, -3, …), not the
+      // backend's map iteration order - the concurrent /ensure calls above
+      // race, so the backend's insertion order isn't deterministic.
+      const shown =
+        activePlatformIds.length > 0
+          ? activePlatformIds.map((pid) => byId[pid]).filter((p): p is PlatformFull => p != null)
+          : Object.values(byId)
       setPlatforms(shown)
       setPlatformIds(shown.map((p) => p.platformId))
       setPool(await poolRes.json())

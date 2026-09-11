@@ -13,10 +13,12 @@ export function RemoteConnectionBadge({
   role,
   status,
   size = 14,
+  labelClass = 'text-xs',
 }: {
   role: Role
   status: RemoteConnection
   size?: number
+  labelClass?: string
 }) {
   const Icon = status.transport === 'ethernet' ? EthernetPort : Wifi
   const colorClass = status.connected ? 'text-green-500' : 'text-red-500'
@@ -26,7 +28,7 @@ export function RemoteConnectionBadge({
       className="flex items-center gap-1"
       title={`${role} remote: ${status.connected ? 'connected' : 'disconnected'}`}
     >
-      <span className={`text-xs font-bold ${ROLE_COLOR[role]}`}>{ROLE_LABEL[role]}</span>
+      <span className={`font-bold ${labelClass} ${ROLE_COLOR[role]}`}>{ROLE_LABEL[role]}</span>
       <Icon size={size} className={colorClass} />
     </div>
   )
