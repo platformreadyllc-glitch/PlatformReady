@@ -6,12 +6,16 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
+import type { IncomingMessage } from 'http';
+import type { Duplex } from 'stream';
 import { WebSocketServer, WebSocket } from 'ws';
 import { PlatformService } from './platform.service';
-import { Role, Button, Transport } from './models/enums';
+import { Role, Button } from './models/enums';
 import { PlatformClockSerialized } from './models/platform-clock';
 
 type LiveSocket = WebSocket & { isAlive?: boolean };
+
+const ESP_WS_PATH = '/esp32-ws';
 
 // How often each connection is pinged, and therefore roughly how long a
 // power-cycled remote's connected status takes to flip back to false (worst
@@ -20,20 +24,28 @@ type LiveSocket = WebSocket & { isAlive?: boolean };
 const HEARTBEAT_INTERVAL_MS = 2000;
 
 // Pushes assignment/vote updates to ESP32 remotes over a raw `ws` server
-// mounted on the same HTTP server Nest already runs, at a distinct path
-// ('/esp32-ws') so it never collides with the browser-facing socket.io
-// traffic PlatformGateway serves at '/socket.io/'. This is a plain provider
-// rather than a second @WebSocketGateway because Nest binds one adapter
-// app-wide - see the Phase C plan for the full rationale.
+// sharing the HTTP server Nest already runs. Runs in noServer mode with a
+// manual `upgrade` handler that ONLY claims requests for ESP_WS_PATH and
+// leaves everything else untouched for the socket.io adapter's own upgrade
+// handler - the `ws` `{ server, path }` option does NOT do this (its
+// upgrade listener aborts every non-matching upgrade, which silently
+// breaks socket.io's websocket transport). A plain provider rather than a
+// second @WebSocketGateway because Nest binds one adapter app-wide.
 @Injectable()
 export class EspRemotesGateway
   implements OnApplicationBootstrap, OnModuleDestroy
 {
   private wss!: WebSocketServer;
   private heartbeatTimer?: ReturnType<typeof setInterval>;
-  // remoteId -> its one live connection. A reconnect simply replaces the
-  // entry; the superseded socket (if still technically open) is left for
-  // the heartbeat sweep to reap.
+  private upgradeHandler?: (
+    req: IncomingMessage,
+    socket: Duplex,
+    head: Buffer,
+  ) => void;
+  // remoteId -> its one live connection. A reconnect replaces the entry
+  // and terminates the superseded socket (see the connection handler) - a
+  // half-open old socket isn't in this map, so the heartbeat sweep can't
+  // reap it.
   private readonly connections = new Map<string, LiveSocket>();
 
   constructor(
@@ -44,26 +56,37 @@ export class EspRemotesGateway
 
   onApplicationBootstrap(): void {
     const httpServer = this.httpAdapterHost.httpAdapter.getHttpServer();
-    this.wss = new WebSocketServer({ server: httpServer, path: '/esp32-ws' });
+    this.wss = new WebSocketServer({ noServer: true });
 
-    this.wss.on('connection', (ws: LiveSocket, req) => {
-      const params = new URL(req.url ?? '', 'http://esp32-ws.local')
-        .searchParams;
-      const remoteId = params.get('remoteId');
+    this.upgradeHandler = (req, socket, head) => {
+      const { pathname } = new URL(req.url ?? '', 'http://esp32-ws.local');
+      if (pathname !== ESP_WS_PATH) return; // not ours - leave it for socket.io
+      this.wss.handleUpgrade(req, socket, head, (ws) => {
+        this.wss.emit('connection', ws, req);
+      });
+    };
+    httpServer.on('upgrade', this.upgradeHandler);
+
+    this.wss.on('connection', (ws: LiveSocket, req: IncomingMessage) => {
+      const remoteId = new URL(
+        req.url ?? '',
+        'http://esp32-ws.local',
+      ).searchParams.get('remoteId');
 
       if (!remoteId || !this.platformService.findRemote(remoteId)) {
         ws.close(4000, 'unknown remote');
         return;
       }
 
-      const rawTransport = params.get('transport');
-      const transport: Transport =
-        rawTransport === 'wifi' || rawTransport === 'ethernet'
-          ? rawTransport
-          : null;
+      // A reconnect that beats the server noticing the old TCP connection
+      // died would otherwise leak that half-open socket until OS keepalive
+      // reaps it (hours). Terminate it now; its `close` handler no-ops
+      // because the map no longer points at it.
+      const superseded = this.connections.get(remoteId);
+      if (superseded && superseded !== ws) superseded.terminate();
 
       this.connections.set(remoteId, ws);
-      this.platformService.markRemoteConnected(remoteId, transport);
+      this.platformService.markRemoteConnected(remoteId);
 
       ws.isAlive = true;
       ws.on('pong', () => {
@@ -95,6 +118,11 @@ export class EspRemotesGateway
 
   onModuleDestroy(): void {
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    if (this.upgradeHandler) {
+      this.httpAdapterHost.httpAdapter
+        .getHttpServer()
+        .off('upgrade', this.upgradeHandler);
+    }
     this.wss?.close();
   }
 
@@ -104,7 +132,10 @@ export class EspRemotesGateway
     platformId: string | null,
     role: Role | null,
   ): void {
-    this.send(remoteId, { type: 'assignment', platformId, role });
+    this.sendFrame(
+      remoteId,
+      JSON.stringify({ type: 'assignment', platformId, role }),
+    );
   }
 
   // Called by PlatformService whenever a platform's votes or clock change -
@@ -116,15 +147,12 @@ export class EspRemotesGateway
     votes: Record<string, Button | null>,
     clock: PlatformClockSerialized,
   ): void {
-    for (const remoteId of activeRemoteIds) {
-      this.send(remoteId, { type: 'state', votes, clock });
-    }
+    const frame = JSON.stringify({ type: 'state', votes, clock });
+    for (const remoteId of activeRemoteIds) this.sendFrame(remoteId, frame);
   }
 
-  private send(remoteId: string, payload: unknown): void {
+  private sendFrame(remoteId: string, frame: string): void {
     const ws = this.connections.get(remoteId);
-    if (ws && ws.readyState === ws.OPEN) {
-      ws.send(JSON.stringify(payload));
-    }
+    if (ws && ws.readyState === ws.OPEN) ws.send(frame);
   }
 }

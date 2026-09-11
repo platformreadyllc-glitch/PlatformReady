@@ -195,18 +195,31 @@ describe('PlatformService ESP32 WS integration', () => {
     expect(gw.emitPlatformUpdate).not.toHaveBeenCalled();
   });
 
-  it('markRemoteConnected records the reported transport', () => {
+  it('markRemoteConnected pushes the platform snapshot to the joining remote', () => {
     const gw = makeGateway();
-    const svc = new PlatformService(gw, makeLc());
+    const esp = makeEspGateway();
+    const svc = new PlatformService(gw, makeLc(), esp);
     svc.ensurePlatform({ platformId: 'p1' });
 
-    svc.markRemoteConnected('kb-left', 'ethernet');
-    expect(svc.findRemote('kb-left')?.transport).toBe('ethernet');
-
-    // A later connect without a transport (shouldn't happen in practice)
-    // doesn't erase the last-known value.
     svc.markRemoteConnected('kb-left');
-    expect(svc.findRemote('kb-left')?.transport).toBe('ethernet');
+
+    expect(esp.broadcastPlatformState).toHaveBeenCalledWith(
+      ['kb-left'],
+      expect.any(Object),
+      expect.objectContaining({ mode: 'ACTIVE' }),
+    );
+  });
+
+  it('markRemoteDisconnected does not push a snapshot', () => {
+    const gw = makeGateway();
+    const esp = makeEspGateway();
+    const svc = new PlatformService(gw, makeLc(), esp);
+    svc.ensurePlatform({ platformId: 'p1' });
+    svc.markRemoteConnected('kb-left');
+    esp.broadcastPlatformState.mockClear();
+
+    svc.markRemoteDisconnected('kb-left');
+    expect(esp.broadcastPlatformState).not.toHaveBeenCalled();
   });
 
   it('castVote broadcasts the platform votes+clock to ESP32 remotes via espGateway', () => {
@@ -293,6 +306,23 @@ describe('PlatformService.startGlobalBreak', () => {
     expect(svc.getPlatform('p1').clock.mode).toBe(ClockMode.BREAK);
     expect(svc.getPlatform('p2').clock.mode).toBe(ClockMode.BREAK);
     expect(gw.emitGlobalUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('notifies ESP32 remotes on every platform', () => {
+    const gw = makeGateway();
+    const esp = makeEspGateway();
+    const svc = new PlatformService(gw, makeLc(), esp);
+    svc.ensurePlatform({ platformId: 'p1' });
+    svc.ensurePlatform({ platformId: 'p2' });
+    esp.broadcastPlatformState.mockClear();
+
+    svc.startGlobalBreak(600);
+
+    expect(esp.broadcastPlatformState).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(Object),
+      expect.objectContaining({ mode: 'BREAK' }),
+    );
   });
 });
 
@@ -384,6 +414,23 @@ describe('PlatformService.cancelGlobalBreak', () => {
     expect(svc.getPlatform('p1').clock.mode).toBe(ClockMode.ACTIVE);
     expect(svc.getPlatform('p2').clock.mode).toBe(ClockMode.ACTIVE);
     expect(gw.emitGlobalUpdate).toHaveBeenCalledTimes(2);
+  });
+
+  it('notifies ESP32 remotes that the break ended (no clock tick to self-heal)', () => {
+    const gw = makeGateway();
+    const esp = makeEspGateway();
+    const svc = new PlatformService(gw, makeLc(), esp);
+    svc.ensurePlatform({ platformId: 'p1' });
+    svc.startGlobalBreak(600);
+    esp.broadcastPlatformState.mockClear();
+
+    svc.cancelGlobalBreak();
+
+    expect(esp.broadcastPlatformState).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(Object),
+      expect.objectContaining({ mode: 'ACTIVE' }),
+    );
   });
 
   it('cancels pending reset timers so they do not fire after cancellation', () => {

@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { PlatformManager } from './models/platform-manager';
 import { Platform } from './models/platform';
-import { Button, Role, ClockMode, ClockState, Transport } from './models/enums';
+import { Button, Role, ClockMode, ClockState } from './models/enums';
 import { CreatePlatformDto } from './dto/create-platform.dto';
 import { RegisterRemoteDto } from './dto/register-remote.dto';
 import { RegisterPhysicalRemoteDto } from './dto/register-physical-remote.dto';
@@ -53,18 +53,18 @@ export class PlatformService {
     return this.manager.findRemote(remoteId);
   }
 
-  markRemoteConnected(remoteId: string, transport?: Transport): void {
+  markRemoteConnected(remoteId: string): void {
     const remote = this.manager.findRemote(remoteId);
     if (!remote) return;
-    remote.connect(transport);
-    this.emitIfActive(remote);
+    remote.connect();
+    this.emitIfActive(remote, true);
   }
 
   markRemoteDisconnected(remoteId: string): void {
     const remote = this.manager.findRemote(remoteId);
     if (!remote) return;
     remote.disconnect();
-    this.emitIfActive(remote);
+    this.emitIfActive(remote, false);
   }
 
   // Remote.serialize() already includes `connected`, so re-emitting the
@@ -72,13 +72,26 @@ export class PlatformService {
   // live connected-status - no new event type required. Only active remotes
   // matter here: Platform.serialize() doesn't include inactiveRemotes at
   // all, so a benched/pooled remote's connection state has nothing to emit.
-  private emitIfActive(remote: Remote): void {
+  //
+  // On connect (pushSnapshot), also send this one remote its current
+  // votes+clock over WS - otherwise a remote that joins or reconnects
+  // mid-attempt shows a blank/stale mini-scoreboard until the next
+  // platform event happens to fire a broadcast.
+  private emitIfActive(remote: Remote, pushSnapshot: boolean): void {
     if (!remote.platformId || !this.manager.hasPlatform(remote.platformId)) {
       return;
     }
     const platform = this.manager.getPlatform(remote.platformId);
     if (!platform.activeRemotes.has(remote.remoteId)) return;
-    this.gateway.emitPlatformUpdate(remote.platformId, platform.serialize());
+    const serialized = platform.serialize();
+    this.gateway.emitPlatformUpdate(remote.platformId, serialized);
+    if (pushSnapshot) {
+      this.espGateway?.broadcastPlatformState(
+        [remote.remoteId],
+        serialized.votes,
+        serialized.clock,
+      );
+    }
   }
 
   // Single choke point for "a platform's state changed" - pushes the
@@ -98,6 +111,22 @@ export class PlatformService {
       serialized.votes,
       serialized.clock,
     );
+  }
+
+  // The global-break paths notify browsers via gateway.emitGlobalUpdate,
+  // which has no ESP equivalent - without this, cancelling a global break
+  // (no clock tick to self-heal it) leaves every remote's mini-scoreboard
+  // frozen on the stale BREAK clock until the next per-platform event.
+  private pushAllPlatformStateToEsp(): void {
+    if (!this.espGateway) return;
+    for (const platform of this.manager.listPlatforms()) {
+      const serialized = platform.serialize();
+      this.espGateway.broadcastPlatformState(
+        platform.activeRemotes.keys(),
+        serialized.votes,
+        serialized.clock,
+      );
+    }
   }
 
   createPlatform(dto: CreatePlatformDto): Platform {
@@ -480,6 +509,7 @@ export class PlatformService {
       this.manager.startGlobalBreak(durationSeconds);
       const all = this.manager.serializeAll();
       this.gateway.emitGlobalUpdate(all);
+      this.pushAllPlatformStateToEsp();
       for (const platform of this.manager.listPlatforms()) {
         this.scheduleBreakReset(platform.platformId, durationSeconds);
         this.startClockTick(platform.platformId);
@@ -559,6 +589,7 @@ export class PlatformService {
     }
     const all = this.manager.serializeAll();
     this.gateway.emitGlobalUpdate(all);
+    this.pushAllPlatformStateToEsp();
     return all;
   }
 
