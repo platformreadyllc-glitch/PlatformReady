@@ -302,12 +302,31 @@ export class PlatformService {
       this.broadcastPlatformUpdate(platformId, platform);
       if (platform.clock.state() === ClockState.RUNNING) {
         this.startClockTick(platformId);
-        this.liftingCast.notifyClockStart(platformId).catch((e: unknown) => {
-          console.error(
-            '[LC] clock start notification failed',
-            (e as Error).message,
-          );
-        });
+        // LiftingCast's own clock duration is sticky server-side - it stays
+        // at whatever was last configured (e.g. a 10/20min break) until
+        // something tells it otherwise. Our own PlatformClock is already
+        // correctly back at the 60s attempt duration by this point
+        // (handleClockButton -> resetToActive() when idle), but LC only
+        // finds out if we say so - without this, the first attempt clock
+        // after any break kept counting down from the break's duration.
+        this.liftingCast
+          .notifySetClock(platformId, platform.clock.serialize().duration)
+          .then(() =>
+            this.liftingCast
+              .notifyClockStart(platformId)
+              .catch((e: unknown) => {
+                console.error(
+                  '[LC] clock start notification failed',
+                  (e as Error).message,
+                );
+              }),
+          )
+          .catch((e: unknown) => {
+            console.error(
+              '[LC] set clock notification failed',
+              (e as Error).message,
+            );
+          });
       } else {
         this.cancelClockTick(platformId);
         this.liftingCast.notifyClockReset(platformId).catch((e: unknown) => {

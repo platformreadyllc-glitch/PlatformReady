@@ -156,6 +156,44 @@ describe('PlatformService.castVote', () => {
   });
 });
 
+describe('PlatformService.pressClockButton', () => {
+  it('syncs LiftingCast to the 60s attempt duration before starting it', async () => {
+    const gw = makeGateway();
+    const lc = makeLc();
+    const svc = new PlatformService(gw, lc);
+    svc.ensurePlatform({ platformId: 'p1' });
+
+    svc.pressClockButton('p1', 'kb-chief');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(lc.notifySetClock).toHaveBeenCalledWith('p1', 60);
+    expect(lc.notifyClockStart).toHaveBeenCalledWith('p1');
+    // Order matters - LC needs the duration set before it's told to start.
+    const setOrder = lc.notifySetClock.mock.invocationCallOrder[0];
+    const startOrder = lc.notifyClockStart.mock.invocationCallOrder[0];
+    expect(setOrder).toBeLessThan(startOrder);
+  });
+
+  it('resyncs to 60s even after a break configured LiftingCast to a longer duration', async () => {
+    // Reproduces the actual bug: a break sets LC's clock to e.g. 600s: LC
+    // has no idea an attempt clock should be 60s unless told again.
+    const gw = makeGateway();
+    const lc = makeLc();
+    const svc = new PlatformService(gw, lc);
+    svc.ensurePlatform({ platformId: 'p1' });
+    svc.startPlatformBreak('p1', 600);
+    svc.cancelPlatformBreak('p1');
+    lc.notifySetClock.mockClear();
+
+    svc.pressClockButton('p1', 'kb-chief');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(lc.notifySetClock).toHaveBeenCalledWith('p1', 60);
+  });
+});
+
 describe('PlatformService ESP32 WS integration', () => {
   it('findRemote passes through to the pool, active platforms, and unknown ids', () => {
     const gw = makeGateway();
