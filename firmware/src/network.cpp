@@ -150,6 +150,42 @@ Client* networkNewClient() {
   return &g_wifiClient;
 }
 
+// ── WS client factory ─────────────────────────────────────────────────────
+// Separate, long-lived instances dedicated to the persistent WS connection
+// (ws_network_client.cpp) - unlike g_ethClient/g_wifiClient above, these are
+// NOT reset to a fresh object on every call, since a WS session needs one
+// stable underlying socket for its whole lifetime, not a fresh one per
+// one-shot REST/OTA request.
+
+static EthernetClient g_ethWsClient;
+static WiFiClient     g_wifiWsClient;
+
+// WebSocketsClient (via ws_network_client.cpp) calls the 3-arg
+// connect(host, port, timeout_ms) on ESP32, but the generic Client
+// interface only declares the 2-arg overload - EthernetClient has no
+// 3-arg overload at all, and while WiFiClient does, it's not reachable
+// through a plain Client* the way ws_network_client.cpp holds these. Both
+// transports' connect timeouts are pre-configured once here instead
+// (where the concrete types are in scope), approximating the WS library's
+// own WEBSOCKETS_TCP_TIMEOUT (5000ms, WebSockets.h).
+Client* networkEthernetWsClient() {
+  static bool configured = false;
+  if (!configured) {
+    g_ethWsClient.setConnectionTimeout(5000);
+    configured = true;
+  }
+  return &g_ethWsClient;
+}
+
+Client* networkWiFiWsClient() {
+  static bool configured = false;
+  if (!configured) {
+    g_wifiWsClient.setTimeout(5);  // seconds - matches the 5000ms above
+    configured = true;
+  }
+  return &g_wifiWsClient;
+}
+
 // ── Ethernet config web server (webConfigRunEthernet) ─────────────────────────
 // Declared in webconfig.h, implemented here so Ethernet_Generic.h is only
 // included in this one translation unit.

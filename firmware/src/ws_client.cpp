@@ -5,13 +5,22 @@
 #include <ArduinoJson.h>
 #include <string.h>
 
-// WebSocketsClient manages its own internal WiFiClient and doesn't accept
-// an injected generic Client* the way ArduinoHttpClient's HttpClient does
-// (see network.cpp's networkNewClient()) - so, like OTA before it got that
-// treatment, this connection is WiFi-only. Non-issue today: Ethernet is
-// -DSKIP_ETHERNET'd off. See firmware/README.md.
+// Routed through WEBSOCKETS_NETWORK_TYPE=NETWORK_CUSTOM (platformio.ini) +
+// ws_network_client.cpp, so this connection follows whichever transport
+// network.cpp's networkIsEthernet() currently reports, same as REST/OTA
+// (networkNewClient()) - unlike the plain default build, which hardcodes
+// a WiFiClient internally.
 static WebSocketsClient webSocket;
 static bool g_started = false;
+// Set once by wsInit(), reused by wsNotifyTransportChanged() to rebuild
+// the URL (the ?transport= query param needs to change on every runtime
+// transport switch, not just at initial connect).
+static String g_remoteId;
+
+static String wsUrl(const String& remoteId, bool isEthernet) {
+  return "/esp32-ws?remoteId=" + remoteId +
+         "&transport=" + (isEthernet ? "ethernet" : "wifi");
+}
 
 struct PendingAssignment {
   bool pending = false;
@@ -99,9 +108,9 @@ static void wsEvent(WStype_t type, uint8_t* payload, size_t length) {
   }
 }
 
-void wsInit(const String& remoteId) {
-  String url = "/esp32-ws?remoteId=" + remoteId;
-  webSocket.begin(apiGetHost(), apiGetPort(), url);
+void wsInit(const String& remoteId, bool isEthernet) {
+  g_remoteId = remoteId;
+  webSocket.begin(apiGetHost(), apiGetPort(), wsUrl(remoteId, isEthernet));
   webSocket.onEvent(wsEvent);
   webSocket.setReconnectInterval(5000);
   // The backend's own 2s ping keeps its liveness view current regardless;
@@ -116,19 +125,17 @@ void wsLoop() {
   webSocket.loop();
 }
 
-void wsNotifyTransportChanged() {
+void wsNotifyTransportChanged(bool isEthernet) {
   if (!g_started) return;
-  // WebSocketsClient::loop() reconnects immediately (not after its usual
-  // setReconnectInterval() throttle) once already-connected, and always
-  // constructs a fresh underlying network client on reconnect - so a
-  // plain disconnect() here is all that's needed to make it pick up
-  // whichever transport is now active, once the WEBSOCKETS_NETWORK_TYPE=
-  // NETWORK_CUSTOM wrapper (ws_network_client.cpp) lands and makes that
-  // client transport-aware. Until then this is WiFi-only regardless (see
-  // the comment above), so calling this just forces a prompt reconnect
-  // over the same transport - still a real improvement (faster recovery
-  // on a network event) but not yet the actual transport switch.
+  // disconnect() first properly tears down any live connection (stops and
+  // deletes the underlying wrapper) before begin() below resets its tcp
+  // pointer to NULL again - calling begin() directly on a live connection
+  // would otherwise leak the old wrapper instead of freeing it. begin()
+  // only touches _host/_port/the connection state, not the event
+  // callback/reconnect-interval/heartbeat config set above, so those don't
+  // need to be reapplied.
   webSocket.disconnect();
+  webSocket.begin(apiGetHost(), apiGetPort(), wsUrl(g_remoteId, isEthernet));
 }
 
 bool wsPollAssignmentChange(String& platformId, String& role) {

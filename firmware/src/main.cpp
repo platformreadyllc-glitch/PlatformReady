@@ -222,7 +222,7 @@ void loop() {
       networkFallbackToWiFi();
       networkBeginWiFi();
       networkAssociateWiFiNonInteractive();
-      wsNotifyTransportChanged();
+      wsNotifyTransportChanged(networkIsEthernet());
       displayShowError("Eth lost, WiFi...");
       break;
     case TransportAction::SWITCH_TO_ETHERNET:
@@ -232,7 +232,7 @@ void loop() {
       // cable turns out to be marginal, and matches the boot-time
       // decision to never proactively manage WiFi off.
       if (networkTryEthernet()) {
-        wsNotifyTransportChanged();
+        wsNotifyTransportChanged(networkIsEthernet());
       }
       break;
     case TransportAction::STAY:
@@ -307,7 +307,7 @@ void loop() {
 
       // Opens the persistent connection used for liveness, live assignment
       // sync, and the mini-scoreboard - see ws_client.h.
-      wsInit(cfg.serial);
+      wsInit(cfg.serial, networkIsEthernet());
 
       // Don't make freshly-booted devices wait up to OTA_CHECK_INTERVAL_MS
       // for their first update check.

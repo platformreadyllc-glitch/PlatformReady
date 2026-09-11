@@ -40,3 +40,14 @@ String networkLocalIP();
 // or until the returned client's stop() is called.
 // NOTE: not thread-safe; only call from loop().
 Client* networkNewClient();
+
+// Long-lived Client instances dedicated to the persistent WS connection
+// (ws_network_client.cpp), one per transport. Unlike networkNewClient(),
+// these are NOT reset to a fresh object per call - a WS session needs one
+// stable underlying socket for as long as it's connected. Callers should
+// pin whichever one they get for the life of a given TCP session rather
+// than re-fetching per read/write call, so a mid-session transport flip
+// (see networkIsEthernet()) can't split one connection's calls across two
+// different sockets.
+Client* networkEthernetWsClient();
+Client* networkWiFiWsClient();

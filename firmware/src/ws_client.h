@@ -4,8 +4,13 @@
 // Opens the persistent WS connection to the backend and registers the
 // event handler. Call once after a successful registration (main.cpp),
 // once remoteId (cfg.serial) is known — see esp-remotes.gateway.ts, which
-// validates remoteId at connect time.
-void wsInit(const String& remoteId);
+// validates remoteId at connect time. isEthernet is reported to the
+// backend as this remote's current transport (?transport=wifi/ethernet) -
+// purely informational (see esp-remotes.gateway.ts's Transport tracking);
+// the connection itself always follows whichever transport
+// network.cpp's networkIsEthernet() reports at connect() time (see
+// ws_network_client.cpp), independent of this value.
+void wsInit(const String& remoteId, bool isEthernet);
 
 // Non-blocking - pumps the WS connection's state machine (connect/
 // reconnect, heartbeat, incoming frames). Safe to call every loop()
@@ -17,9 +22,10 @@ void wsLoop();
 // Forces the WS connection to drop and reconnect immediately - call when
 // the active transport (WiFi/Ethernet) changes, so the client picks up
 // the new transport right away instead of waiting out its own dead-
-// connection detection. No-op if wsInit() hasn't run yet (mirrors
+// connection detection, and so the backend's reported transport (see
+// wsInit()) doesn't go stale. No-op if wsInit() hasn't run yet (mirrors
 // wsLoop()'s own guard).
-void wsNotifyTransportChanged();
+void wsNotifyTransportChanged(bool isEthernet);
 
 // Returns true and fills platformId/role if a new assignment arrived since
 // the last call (and clears the pending flag) - empty strings mean
