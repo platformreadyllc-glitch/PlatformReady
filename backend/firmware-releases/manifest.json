@@ -1,4 +1,4 @@
 {
-  "side": { "version": "1.5.9", "file": "side-1.5.9.bin" },
-  "chief": { "version": "1.5.9", "file": "chief-1.5.9.bin" }
+  "side": { "version": "1.5.10", "file": "side-1.5.10.bin" },
+  "chief": { "version": "1.5.10", "file": "chief-1.5.10.bin" }
 }
