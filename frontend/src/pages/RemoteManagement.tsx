@@ -11,11 +11,10 @@ import {
 } from '@dnd-kit/core'
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core'
 import { io, Socket } from 'socket.io-client'
-import { Wifi, EthernetPort } from 'lucide-react'
+import { Wifi } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { API } from '@/hooks/usePlatformSocket'
 import { readActivePlatforms } from '@/lib/platformHelpers'
-import type { Transport } from '@/lib/platformTypes'
 
 type HardwareType = 'side' | 'chief'
 
@@ -26,7 +25,6 @@ interface RemoteSerialized {
   hasVibration: boolean
   hasDisplay: boolean
   connected: boolean
-  transport: Transport
 }
 
 interface PoolEntry extends RemoteSerialized {
@@ -104,17 +102,16 @@ function blockedReason(role: string): string {
   return role === 'chief' ? 'chief hardware only' : 'side hardware only'
 }
 
-// Icon shape reflects the transport (wifi vs ethernet), color reflects
-// connected (green) vs disconnected (red) - same convention as
-// RemoteConnectionBadge.tsx, minus the L/C/R letter (redundant here since
-// role is already shown elsewhere on this page). kb-* (virtual/keyboard)
-// remotes never open a WS connection at all, so callers skip rendering
-// this for them rather than showing a permanently-red icon.
-function ConnectedDot({ connected, transport }: { connected: boolean; transport: Transport }) {
-  const Icon = transport === 'ethernet' ? EthernetPort : Wifi
+// Wifi icon, colored connected (green) vs disconnected (red) - same
+// convention as RemoteConnectionBadge.tsx, minus the L/C/R letter
+// (redundant here since role is already shown elsewhere on this page).
+// kb-* (virtual/keyboard) remotes never open a WS connection at all, so
+// callers skip rendering this for them rather than showing a
+// permanently-red icon.
+function ConnectedDot({ connected }: { connected: boolean }) {
   return (
     <span title={connected ? 'Connected' : 'Disconnected'} className="shrink-0 leading-none">
-      <Icon size={12} className={connected ? 'text-green-500' : 'text-red-500'} />
+      <Wifi size={12} className={connected ? 'text-green-500' : 'text-red-500'} />
     </span>
   )
 }
@@ -143,7 +140,7 @@ function ActiveRemote({ remote, platformId }: { remote: RemoteSerialized; platfo
     >
       <div className="flex items-center gap-1.5 min-w-0">
         <span className="text-xs font-mono text-primary font-medium truncate">{remote.remoteId}</span>
-        {!isKb(remote.remoteId) && <ConnectedDot connected={remote.connected} transport={remote.transport} />}
+        {!isKb(remote.remoteId) && <ConnectedDot connected={remote.connected} />}
       </div>
       <span className="text-xs text-secondary">{remoteLabel(remote, !isDragging)}</span>
     </div>
@@ -249,7 +246,7 @@ function PoolRemote({ entry }: { entry: PoolEntry }) {
     >
       <div className="flex items-center gap-1.5">
         <span className="text-xs font-mono text-primary font-medium">{entry.remoteId}</span>
-        {!isKb(entry.remoteId) && <ConnectedDot connected={entry.connected} transport={entry.transport} />}
+        {!isKb(entry.remoteId) && <ConnectedDot connected={entry.connected} />}
       </div>
       <span className="text-xs text-secondary">{remoteLabel(entry, false)}</span>
     </div>
@@ -338,7 +335,15 @@ export default function RemoteManagement() {
           ? activePlatformIds.map((pid) => byId[pid]).filter((p): p is PlatformFull => p != null)
           : Object.values(byId)
       setPlatforms(shown)
-      setPlatformIds(shown.map((p) => p.platformId))
+      // Keep the previous array identity when the id list hasn't actually
+      // changed - this runs on every fetchPlatforms() (mount + every
+      // drag-drop reassignment), and the live-updates socket effect below
+      // keys on this array, so a fresh identity here would otherwise
+      // disconnect and reconnect that socket on every reassignment.
+      const nextIds = shown.map((p) => p.platformId)
+      setPlatformIds((prev) =>
+        prev.length === nextIds.length && prev.every((id, i) => id === nextIds[i]) ? prev : nextIds,
+      )
       setPool(await poolRes.json())
     } catch (e) {
       setError((e as Error).message)

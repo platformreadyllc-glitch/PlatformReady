@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
-import type { ClockSnapshot, Transport } from '@/lib/platformTypes'
+import type { ClockSnapshot } from '@/lib/platformTypes'
 
 export const API = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
 
@@ -10,7 +10,6 @@ export interface BackendRemote {
   remoteId: string
   role: string
   connected: boolean
-  transport: Transport
 }
 
 export interface BackendPlatformState {
