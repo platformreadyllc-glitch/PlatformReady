@@ -1,6 +1,7 @@
 import { RefereeLight } from '@/components/RefereeLight'
+import { RemoteConnectionBadge } from '@/components/RemoteConnectionBadge'
 import { formatTime } from '@/lib/platformHelpers'
-import type { ClockSnapshot, Role, VoteButton } from '@/lib/platformTypes'
+import type { ClockSnapshot, RemoteConnection, Role, VoteButton } from '@/lib/platformTypes'
 import AttemptChangeOverlay from '@/components/AttemptChangeOverlay'
 
 interface Props {
@@ -10,9 +11,18 @@ interface Props {
   revealed: boolean
   clock: ClockSnapshot
   attemptChangeActive: boolean
+  remoteStatus: Record<Role, RemoteConnection | null>
 }
 
-export function PlatformDisplay({ platformName, dayStr, votes, revealed, clock, attemptChangeActive }: Props) {
+export function PlatformDisplay({
+  platformName,
+  dayStr,
+  votes,
+  revealed,
+  clock,
+  attemptChangeActive,
+  remoteStatus,
+}: Props) {
   const clockColorClass =
     clock.state === 'EXPIRED' ? 'text-red-500' :
       clock.remaining <= 30 ? 'text-yellow-400' :
@@ -30,7 +40,23 @@ export function PlatformDisplay({ platformName, dayStr, votes, revealed, clock, 
     <>
       {/* Header */}
       <header className="flex items-center justify-between px-8 py-1 border-b border-border">
-        <span className="text-[1.5vw] font-semibold text-primary tracking-wide">{platformName}</span>
+        <div className="flex items-center gap-[2vw]">
+          <span className="text-[1.5vw] font-semibold text-primary tracking-wide">{platformName}</span>
+          <div className="flex items-center gap-[1.2vw]">
+            {(['left', 'chief', 'right'] as const).map(
+              (role) =>
+                remoteStatus[role] && (
+                  <RemoteConnectionBadge
+                    key={role}
+                    role={role}
+                    status={remoteStatus[role]}
+                    size={22}
+                    labelClass="text-[1vw]"
+                  />
+                ),
+            )}
+          </div>
+        </div>
         <span className="text-[1.2vw] text-secondary">{dayStr}</span>
       </header>
 

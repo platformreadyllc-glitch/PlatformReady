@@ -1,4 +1,5 @@
 #include "display.h"
+#include "scoreboard.h"
 #include "pins.h"
 #include <Wire.h>
 #include <U8g2lib.h>
@@ -86,6 +87,86 @@ void displayShowActive(const String& platformId, const String& role, const Strin
   u8g2.sendBuffer();
 }
 
+// Formats seconds as "M:SS" (no leading zero on minutes - clocks here
+// range from a 60s attempt up to a 20min break, never triple-digit
+// minutes). The truncating split lives in scoreboard.cpp (host-tested,
+// matches the frontend's Math.floor formatTime).
+static String formatClock(float remainingSeconds) {
+  int minutes, seconds;
+  scoreboardClockParts(remainingSeconds, minutes, seconds);
+  char buf[8];
+  snprintf(buf, sizeof(buf), "%d:%02d", minutes, seconds);
+  return String(buf);
+}
+
+// One referee's circle: nothing at all until this referee votes, then a
+// ring (voted, not yet revealed), then a hand-drawn checkmark (white/good)
+// or X with the infraction letter below once revealed (no font here has
+// check/X glyphs - confirmed against u8g2's font tables, all
+// Latin-1-only). No role label above it — removed per user feedback to
+// free up vertical space.
+static void drawScoreColumn(int centerX, const ScoreVote& vote) {
+  const int cy = 13;
+  const int r  = 10;
+
+  if (vote.state == ScoreVoteState::EMPTY) return;
+
+  u8g2.drawCircle(centerX, cy, r);
+
+  switch (vote.state) {
+    case ScoreVoteState::EMPTY:
+    case ScoreVoteState::HIDDEN:
+      break;
+    case ScoreVoteState::REVEALED:
+      if (vote.button == "white") {
+        u8g2.drawLine(centerX - 5, cy, centerX - 1, cy + 5);
+        u8g2.drawLine(centerX - 1, cy + 5, centerX + 6, cy - 6);
+      } else {
+        u8g2.drawLine(centerX - 6, cy - 6, centerX + 6, cy + 6);
+        u8g2.drawLine(centerX - 6, cy + 6, centerX + 6, cy - 6);
+        char letter = 'R';
+        if (vote.button == "blue") letter = 'B';
+        else if (vote.button == "yellow") letter = 'Y';
+        char buf[2] = { letter, '\0' };
+        u8g2.setFont(u8g2_font_6x10_tf);
+        u8g2.drawStr(centerX - u8g2.getStrWidth(buf) / 2, 32, buf);
+      }
+      break;
+  }
+}
+
+// The panel is physically two-color (confirmed on hardware: with this
+// project's U8G2_R2 rotation, the top ~48 rows render on the blue segment,
+// the bottom ~16 on yellow) - live/frequently-changing info (votes, clock)
+// stays in the blue area, general/status info in the yellow strip at the
+// bottom, matching the real scoring page's own vote-circles-above-clock
+// layout.
+void displayShowScoreboard(const String& status, const ScoreVote& left,
+                            const ScoreVote& chief, const ScoreVote& right,
+                            float clockRemaining, bool isEthernet) {
+  if (!g_displayPresent) return;
+  u8g2.clearBuffer();
+
+  drawScoreColumn(21, left);
+  drawScoreColumn(64, chief);
+  drawScoreColumn(107, right);
+
+  u8g2.setFont(u8g2_font_9x18B_tf);
+  String clockStr = formatClock(clockRemaining);
+  u8g2.drawStr((128 - u8g2.getStrWidth(clockStr.c_str())) / 2, 47, clockStr.c_str());
+
+  u8g2.setFont(u8g2_font_6x10_tf);
+  u8g2.drawStr((128 - u8g2.getStrWidth(status.c_str())) / 2, 58, status.c_str());
+
+  // Connection-type indicator, bottom-right corner of the yellow strip.
+  // A hand-drawn wifi/ethernet glyph would be unreadable at this scale on
+  // this resolution - plain text reads reliably instead.
+  const char* connLabel = isEthernet ? "eth" : "wifi";
+  u8g2.drawStr(128 - u8g2.getStrWidth(connLabel) - 1, 58, connLabel);
+
+  u8g2.sendBuffer();
+}
+
 void displayShowError(const String& msg) {
   if (!g_displayPresent) return;
   u8g2.clearBuffer();
@@ -102,11 +183,13 @@ void displayShowOtaChecking() {
   u8g2.sendBuffer();
 }
 
-void displayShowOtaUpdating() {
+void displayShowOtaUpdating(int frame) {
   if (!g_displayPresent) return;
   u8g2.clearBuffer();
   drawHeader("UPDATE");
-  u8g2.drawStr(0, 32, "Update in progress...");
+  String dots;
+  for (int i = 0; i < (frame % 4); i++) dots += '.';
+  u8g2.drawStr(0, 32, ("Update in progress" + dots).c_str());
   u8g2.drawStr(0, 46, "Do not power off");
   u8g2.sendBuffer();
 }
@@ -122,11 +205,13 @@ void displayShowOtaFailed(const String& reason) {
   u8g2.sendBuffer();
 }
 
-void displayShowOtaSuccess() {
+void displayShowOtaSuccess(int frame) {
   if (!g_displayPresent) return;
   u8g2.clearBuffer();
   drawHeader("UPDATE");
   u8g2.drawStr(0, 32, "Update success");
-  u8g2.drawStr(0, 46, "Restarting...");
+  String dots;
+  for (int i = 0; i < (frame % 4); i++) dots += '.';
+  u8g2.drawStr(0, 46, ("Restarting" + dots).c_str());
   u8g2.sendBuffer();
 }

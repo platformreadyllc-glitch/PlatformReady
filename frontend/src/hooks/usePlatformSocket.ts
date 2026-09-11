@@ -4,6 +4,14 @@ import type { ClockSnapshot } from '@/lib/platformTypes'
 
 export const API = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
 
+// Only the fields consumed on the frontend, out of the full RemoteSerialized
+// the backend actually sends (backend/src/platform/models/remote.ts).
+export interface BackendRemote {
+  remoteId: string
+  role: string
+  connected: boolean
+}
+
 export interface BackendPlatformState {
   platformId: string
   name: string | null
@@ -11,6 +19,7 @@ export interface BackendPlatformState {
   votes: Record<string, string | null>
   hasCompleteVoteSet: boolean
   attemptChangeActive: boolean
+  activeRemotes: Record<string, BackendRemote>
 }
 
 interface UsePlatformSocketResult {

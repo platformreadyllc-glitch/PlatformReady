@@ -963,6 +963,36 @@ describe('PlatformManager', () => {
   });
 });
 
+describe('PlatformManager.findRemote', () => {
+  it('finds a pooled (unassigned) remote', () => {
+    const manager = new PlatformManager();
+    manager.registerPool('side-h', 'side');
+    expect(manager.findRemote('side-h')?.remoteId).toBe('side-h');
+  });
+
+  it('finds a remote active on a platform', () => {
+    const manager = new PlatformManager();
+    const platform = new Platform({ platformId: 'find1' });
+    manager.addPlatform(platform);
+    manager.registerPool('side-i', 'side');
+    manager.activateRemote('find1', 'side-i', 'left');
+    expect(manager.findRemote('side-i')?.platformId).toBe('find1');
+  });
+
+  it('finds a benched (inactive) remote on a platform', () => {
+    const manager = new PlatformManager();
+    const platform = new Platform({ platformId: 'find2' });
+    platform.registerRemote('kb-bench', 'left', { active: false });
+    manager.addPlatform(platform);
+    expect(manager.findRemote('kb-bench')?.remoteId).toBe('kb-bench');
+  });
+
+  it('returns undefined for a remote that does not exist anywhere', () => {
+    const manager = new PlatformManager();
+    expect(manager.findRemote('nope')).toBeUndefined();
+  });
+});
+
 describe('Platform.resetVotes', () => {
   it('does not clear attemptChangeActive', () => {
     const platform = new Platform({ platformId: 'rv-ac-1' });

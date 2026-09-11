@@ -5,7 +5,7 @@ import { usePlatformState } from '@/hooks/usePlatformState'
 
 export default function PlatformView() {
   const { id } = useParams<{ id: string }>()
-  const { config, votes, revealed, clock, connected, attemptChangeActive } = usePlatformState(id)
+  const { config, votes, revealed, clock, connected, attemptChangeActive, remoteStatus } = usePlatformState(id)
 
   if (!config.configFound) {
     return (
@@ -24,6 +24,7 @@ export default function PlatformView() {
         revealed={revealed}
         clock={clock}
         attemptChangeActive={attemptChangeActive}
+        remoteStatus={remoteStatus}
       />
 
       <KeyboardHintOverlay />

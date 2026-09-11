@@ -16,8 +16,17 @@ export default function ScoreTableView() {
   const [attemptChangePanelOpen, setAttemptChangePanelOpen] = useState(false)
 
   const anyPanelOpen = panelOpen || attemptChangePanelOpen
-  const { config, votes, revealed, clock, connected, attemptChangeActive, startBreakCountdown, toggleAttemptChange } =
-    usePlatformState(id, !anyPanelOpen)
+  const {
+    config,
+    votes,
+    revealed,
+    clock,
+    connected,
+    attemptChangeActive,
+    remoteStatus,
+    startBreakCountdown,
+    toggleAttemptChange,
+  } = usePlatformState(id, !anyPanelOpen)
 
   function openPanel() {
     setSelectedMinutes(null)
@@ -74,6 +83,7 @@ export default function ScoreTableView() {
         revealed={revealed}
         clock={clock}
         attemptChangeActive={attemptChangeActive}
+        remoteStatus={remoteStatus}
       />
 
       {/* Controls — fixed bottom-center */}

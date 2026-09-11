@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <WiFiManager.h>
+#include <WiFi.h>
 #include "pins.h"
 #include "config.h"
 #include "display.h"
@@ -11,6 +12,7 @@
 #include "ota.h"
 #include "version.h"
 #include "watchdog.h"
+#include "ws_client.h"
 
 static RemoteConfig cfg;
 static bool registered = false;
@@ -18,6 +20,77 @@ static unsigned long lastRegisterAttempt = 0;
 static String lastStatus = "READY";
 static unsigned long lastOtaCheck = 0;
 static unsigned long lastActivityMs = 0;
+static unsigned long disconnectedSinceMs = 0;
+static bool wasDisconnected = false;
+static unsigned long lastScoreboardTick = 0;
+static unsigned long lastStatusChangeMs = 0;
+// How long a transient status word (WHITE, ERR, CLOCK, ...) stays on
+// screen before the scoreboard's bottom line reverts to showing the
+// remote's platform/position instead - see refreshDisplay().
+static const unsigned long STATUS_DISPLAY_MS = 5000;
+
+// All lastStatus writes should go through this, not a bare assignment -
+// refreshDisplay() needs to know *when* it changed, not just its value.
+static void setStatus(const String& s) {
+  lastStatus = s;
+  lastStatusChangeMs = millis();
+}
+
+// "platform-1"/"chief" -> "P:1 - Chief". Strips a leading "platform"/
+// "platform-" prefix (case-insensitive) if present so the common naming
+// scheme abbreviates cleanly; falls back to the full platformId
+// otherwise rather than assuming every platform follows that convention.
+static String formatPlatformRole(const String& platformId, const String& role) {
+  String lower = platformId;
+  lower.toLowerCase();
+  String shortId = platformId;
+  if (lower.startsWith("platform-")) {
+    shortId = platformId.substring(9);
+  } else if (lower.startsWith("platform")) {
+    shortId = platformId.substring(8);
+  }
+  String roleCap = role;
+  if (roleCap.length() > 0) {
+    roleCap.setCharAt(0, toupper(roleCap[0]));
+  }
+  return "P:" + shortId + " - " + roleCap;
+}
+
+static ScoreVote toScoreVote(const RefereeVoteDisplay& v) {
+  ScoreVote sv;
+  switch (v.state) {
+    case VoteDisplayState::NOT_VOTED: sv.state = ScoreVoteState::EMPTY;    break;
+    case VoteDisplayState::HIDDEN:    sv.state = ScoreVoteState::HIDDEN;   break;
+    case VoteDisplayState::REVEALED:  sv.state = ScoreVoteState::REVEALED; break;
+  }
+  sv.button = v.button;
+  return sv;
+}
+
+// Single choke point for "redraw whatever's currently true" - shows the
+// live mini-scoreboard once registered and assigned to a platform, or
+// falls back to the plain unassigned/status screen otherwise (including
+// the window right after boot where cfg.platformId may still hold a
+// stale cached assignment from before this registration cycle has
+// reconfirmed it with the backend). Replaces the repeated
+// `displayShowActive(cfg.platformId, cfg.role, lastStatus)` call sites
+// below - keeps display.cpp itself free of any ws_client.h dependency.
+static void refreshDisplay() {
+  if (!registered || cfg.platformId.isEmpty()) {
+    displayShowActive(cfg.platformId, cfg.role, lastStatus);
+    return;
+  }
+  ScoreboardState s = wsGetScoreboard();
+  // A transient status (just voted, just pressed clock, ERR) is only
+  // useful briefly - once it's stale, showing the remote's own platform/
+  // position is more useful than a permanently-stuck "READY".
+  bool statusFresh = millis() - lastStatusChangeMs < STATUS_DISPLAY_MS;
+  String bottomText = statusFresh ? lastStatus
+                                   : formatPlatformRole(cfg.platformId, cfg.role);
+  displayShowScoreboard(bottomText, toScoreVote(s.left), toScoreVote(s.chief),
+                         toScoreVote(s.right), s.clock.remaining,
+                         networkIsEthernet());
+}
 
 // ── WiFiManager portal with custom params for full config ────────────────────
 static void runWiFiManager(bool forcePortal) {
@@ -122,12 +195,38 @@ void setup() {
 
 void loop() {
   watchdogFeed();
+  // Non-blocking regardless of WiFi state, and a no-op before wsInit() has
+  // run - safe to pump unconditionally ahead of the network gate below.
+  wsLoop();
 
   if (!networkConnected()) {
+    if (disconnectedSinceMs == 0) disconnectedSinceMs = millis();
+    wasDisconnected = true;
     Serial.println("[loop] no network");
     displayShowError("No network");
+
+    // Active retry, WiFi only — WiFi.setAutoReconnect (network.cpp) handles
+    // most drops on its own, but this is a backstop for ones it doesn't.
+    // Ethernet's own link-based recovery is separate and already adequate.
+    if (!networkIsEthernet() && millis() - disconnectedSinceMs > 10000) {
+      Serial.println("[loop] attempting WiFi reconnect");
+      WiFi.reconnect();
+      disconnectedSinceMs = millis();  // don't hammer reconnect() every iteration
+    }
+
     delay(2000);
     return;
+  }
+  disconnectedSinceMs = 0;
+
+  // Network just came back — nothing else in loop() proactively redraws the
+  // screen on reconnect (only specific events do: a button press, the
+  // periodic OTA check), so without this the device could be working fine
+  // underneath while still showing a stale "No network" screen.
+  if (wasDisconnected) {
+    wasDisconnected = false;
+    Serial.println("[loop] network restored");
+    refreshDisplay();
   }
 
   // Register with backend once — retry every 5 s on failure
@@ -140,7 +239,7 @@ void loop() {
     // OK: freshly registered.  SERVER_ERROR: probably already registered — proceed anyway.
     if (state.result == ApiResult::OK || state.result == ApiResult::SERVER_ERROR) {
       registered  = true;
-      lastStatus  = "READY";
+      setStatus("READY");
 
       // Adopt the backend's current platform/role assignment (if any) —
       // assignment happens via the remote management page, not at setup
@@ -159,22 +258,54 @@ void loop() {
         configSave(cfg);
       }
 
-      displayShowActive(cfg.platformId, cfg.role, lastStatus);
+      refreshDisplay();
       hapticDoubleClick();
 
       // Registering successfully is our "this firmware works" milestone —
       // cancels any pending-update/rollback bookkeeping from a prior OTA.
       otaMarkValid();
 
+      // Opens the persistent connection used for liveness, live assignment
+      // sync, and the mini-scoreboard - see ws_client.h.
+      wsInit(cfg.serial);
+
       // Don't make freshly-booted devices wait up to OTA_CHECK_INTERVAL_MS
       // for their first update check.
       lastOtaCheck = millis();
       otaCheckAndApply(cfg, true);
-      displayShowActive(cfg.platformId, cfg.role, lastStatus);
+      refreshDisplay();
     }
   }
 
   if (!registered) return;
+
+  // Periodic redraw while assigned to a platform - the mini-scoreboard's
+  // hidden->revealed vote transition is timed purely against millis(), not
+  // triggered by any incoming message, so nothing else would ever redraw
+  // it. Also keeps the displayed clock roughly current between the
+  // backend's ~1/sec pushes. Unconditional (no dirty-flag check) - a
+  // full-buffer redraw on this OLED is cheap and 4Hz is a light load.
+  if (!cfg.platformId.isEmpty() && millis() - lastScoreboardTick > 250) {
+    lastScoreboardTick = millis();
+    refreshDisplay();
+  }
+
+  // ── Live assignment updates ─────────────────────────────────────────────
+  // Lets a reassignment made via the remote management page take effect
+  // immediately instead of only at the next reboot (see
+  // esp-remotes.gateway.ts on the backend).
+  String newPlatformId, newRole;
+  if (wsPollAssignmentChange(newPlatformId, newRole)) {
+    cfg.platformId = newPlatformId;
+    cfg.role       = newRole;
+    configSave(cfg);
+    apiSetPlatformId(newPlatformId);
+    setStatus("READY");
+    refreshDisplay();
+    hapticDoubleClick();
+    Serial.printf("[loop] assignment changed: platform=%s role=%s\n",
+                   cfg.platformId.c_str(), cfg.role.c_str());
+  }
 
   // ── Vote buttons ─────────────────────────────────────────────────────────
   const Button    voteButtons[] = { Button::WHITE, Button::RED, Button::BLUE, Button::YELLOW };
@@ -188,13 +319,13 @@ void loop() {
     hapticPulse(40);
     ApiResult r = apiCastVote(voteNames[i]);
     if (r == ApiResult::OK) {
-      lastStatus = voteLabels[i];
+      setStatus(voteLabels[i]);
       hapticDoubleClick();
     } else {
-      lastStatus = "ERR";
+      setStatus("ERR");
       hapticError();
     }
-    displayShowActive(cfg.platformId, cfg.role, lastStatus);
+    refreshDisplay();
   }
 
   // ── Clock button (chief only) ─────────────────────────────────────────────
@@ -204,13 +335,16 @@ void loop() {
     hapticPulse(40);
     ApiResult r = apiPressClockButton();
     if (r == ApiResult::OK) {
-      lastStatus = "CLOCK";
+      setStatus("CLOCK");
+      // Don't wait on the WS push to confirm what this remote's own
+      // button press just did - see wsOptimisticClockToggle().
+      wsOptimisticClockToggle();
       hapticDoubleClick();
     } else {
-      lastStatus = "ERR";
+      setStatus("ERR");
       hapticError();
     }
-    displayShowActive(cfg.platformId, cfg.role, lastStatus);
+    refreshDisplay();
   }
 
   // ── Periodic OTA check ────────────────────────────────────────────────────
@@ -221,6 +355,6 @@ void loop() {
     lastOtaCheck = millis();
     bool idle = (millis() - lastActivityMs) > OTA_IDLE_THRESHOLD_MS;
     otaCheckAndApply(cfg, idle);
-    displayShowActive(cfg.platformId, cfg.role, lastStatus);
+    refreshDisplay();
   }
 }

@@ -7,6 +7,7 @@
 #include "../../src/version_compare.h"
 #include "../../src/host_port.h"
 #include "../../src/url_utils.h"
+#include "../../src/scoreboard.h"
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -90,6 +91,101 @@ void test_formValue_last_field_no_trailing_ampersand(void) {
   TEST_ASSERT_EQUAL_STRING("chief", formValue("role=chief", "role").c_str());
 }
 
+// ── scoreboard.cpp: reveal timing ──────────────────────────────────────────
+
+void test_completeSince_sets_on_edge_and_holds(void) {
+  // Not complete -> stays 0.
+  TEST_ASSERT_EQUAL_UINT32(0, scoreboardUpdateCompleteSince(0, false, 5000));
+  // Incomplete -> complete: anchors at now.
+  TEST_ASSERT_EQUAL_UINT32(5000, scoreboardUpdateCompleteSince(0, true, 5000));
+  // Still complete on a later frame: keeps the original anchor.
+  TEST_ASSERT_EQUAL_UINT32(5000, scoreboardUpdateCompleteSince(5000, true, 9000));
+  // Back to incomplete (auto-reset): clears.
+  TEST_ASSERT_EQUAL_UINT32(0, scoreboardUpdateCompleteSince(5000, false, 9000));
+}
+
+void test_revealPhase_not_voted(void) {
+  TEST_ASSERT_EQUAL(RevealPhase::NOT_VOTED,
+                    scoreboardRevealPhase(false, 0, 1000));
+  // Even once the group is complete, an empty slot stays NOT_VOTED.
+  TEST_ASSERT_EQUAL(RevealPhase::NOT_VOTED,
+                    scoreboardRevealPhase(false, 100, 5000));
+}
+
+void test_revealPhase_hidden_until_group_complete(void) {
+  // This ref voted but the group isn't complete yet.
+  TEST_ASSERT_EQUAL(RevealPhase::HIDDEN,
+                    scoreboardRevealPhase(true, 0, 5000));
+}
+
+void test_revealPhase_hidden_during_reveal_delay(void) {
+  // Group complete at t=5000, now t=5500 - within the 1s delay.
+  TEST_ASSERT_EQUAL(RevealPhase::HIDDEN,
+                    scoreboardRevealPhase(true, 5000, 5500));
+}
+
+void test_revealPhase_revealed_after_delay(void) {
+  // Group complete at t=5000, now t=6000 - delay elapsed.
+  TEST_ASSERT_EQUAL(RevealPhase::REVEALED,
+                    scoreboardRevealPhase(true, 5000, 6000));
+  TEST_ASSERT_EQUAL(RevealPhase::REVEALED,
+                    scoreboardRevealPhase(true, 5000, 20000));
+}
+
+// ── scoreboard.cpp: clock interpolation ────────────────────────────────────
+
+void test_interpolateClock_idle_returns_anchor(void) {
+  TEST_ASSERT_EQUAL_FLOAT(42.0f,
+                          scoreboardInterpolateClock(42.0f, 1000, 9000, false));
+}
+
+void test_interpolateClock_counts_down_while_running(void) {
+  // Anchored at 60s @ t=1000; 2.5s later should read ~57.5s.
+  TEST_ASSERT_FLOAT_WITHIN(
+      0.01f, 57.5f, scoreboardInterpolateClock(60.0f, 1000, 3500, true));
+}
+
+void test_interpolateClock_clamps_at_zero(void) {
+  TEST_ASSERT_EQUAL_FLOAT(
+      0.0f, scoreboardInterpolateClock(2.0f, 1000, 10000, true));
+}
+
+// ── scoreboard.cpp: M:SS split (truncating) ────────────────────────────────
+
+void test_clockParts_truncates(void) {
+  int m, s;
+  scoreboardClockParts(59.99f, m, s);
+  TEST_ASSERT_EQUAL_INT(0, m);
+  TEST_ASSERT_EQUAL_INT(59, s);  // not rounded up to 1:00
+
+  scoreboardClockParts(125.0f, m, s);
+  TEST_ASSERT_EQUAL_INT(2, m);
+  TEST_ASSERT_EQUAL_INT(5, s);
+
+  scoreboardClockParts(-3.0f, m, s);
+  TEST_ASSERT_EQUAL_INT(0, m);
+  TEST_ASSERT_EQUAL_INT(0, s);
+}
+
+// ── scoreboard.cpp: optimistic clock toggle ───────────────────────────────
+
+void test_toggleClock_flips_and_resets_to_duration(void) {
+  ClockToggle a = scoreboardToggleClock(false, 60.0f);
+  TEST_ASSERT_TRUE(a.changed);
+  TEST_ASSERT_TRUE(a.running);
+  TEST_ASSERT_EQUAL_FLOAT(60.0f, a.remaining);
+
+  ClockToggle b = scoreboardToggleClock(true, 60.0f);
+  TEST_ASSERT_TRUE(b.changed);
+  TEST_ASSERT_FALSE(b.running);
+  TEST_ASSERT_EQUAL_FLOAT(60.0f, b.remaining);
+}
+
+void test_toggleClock_noop_without_known_duration(void) {
+  ClockToggle t = scoreboardToggleClock(false, 0.0f);
+  TEST_ASSERT_FALSE(t.changed);  // no real clock data yet
+}
+
 int main(int argc, char** argv) {
   UNITY_BEGIN();
 
@@ -110,6 +206,18 @@ int main(int argc, char** argv) {
   RUN_TEST(test_formValue_extracts_field);
   RUN_TEST(test_formValue_missing_key_returns_empty);
   RUN_TEST(test_formValue_last_field_no_trailing_ampersand);
+
+  RUN_TEST(test_completeSince_sets_on_edge_and_holds);
+  RUN_TEST(test_revealPhase_not_voted);
+  RUN_TEST(test_revealPhase_hidden_until_group_complete);
+  RUN_TEST(test_revealPhase_hidden_during_reveal_delay);
+  RUN_TEST(test_revealPhase_revealed_after_delay);
+  RUN_TEST(test_interpolateClock_idle_returns_anchor);
+  RUN_TEST(test_interpolateClock_counts_down_while_running);
+  RUN_TEST(test_interpolateClock_clamps_at_zero);
+  RUN_TEST(test_clockParts_truncates);
+  RUN_TEST(test_toggleClock_flips_and_resets_to_duration);
+  RUN_TEST(test_toggleClock_noop_without_known_duration);
 
   return UNITY_END();
 }

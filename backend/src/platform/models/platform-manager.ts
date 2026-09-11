@@ -11,9 +11,6 @@ export class PlatformManager {
   private _platforms: Map<string, Platform> = new Map();
   // Physical remotes that are not currently active on any platform.
   readonly physicalPool: Map<string, Remote> = new Map();
-  // Claim map: records which platform a physical remote should register on after reboot.
-  // Updated whenever a physical remote is activated on a platform.
-  private _remoteClaims: Map<string, string> = new Map();
 
   private isKb(remoteId: string): boolean {
     return remoteId.startsWith('kb-');
@@ -61,8 +58,16 @@ export class PlatformManager {
     return null;
   }
 
-  getRemoteClaim(remoteId: string): string | undefined {
-    return this._remoteClaims.get(remoteId);
+  // Finds a remote wherever it currently lives: the unassigned pool, or
+  // active/inactive on any platform. Used by EspRemotesGateway to validate
+  // an incoming WS connection's claimed remoteId.
+  findRemote(remoteId: string): Remote | undefined {
+    const pooled = this.physicalPool.get(remoteId);
+    if (pooled) return pooled;
+    for (const platform of this._platforms.values()) {
+      if (platform.hasRemote(remoteId)) return platform.getRemote(remoteId);
+    }
+    return undefined;
   }
 
   // Register a new physical remote (non-kb-*) into the unassigned pool.
@@ -163,7 +168,6 @@ export class PlatformManager {
     this.physicalPool.delete(remoteId);
     remote.platformId = platformId;
     platform.activeRemotes.set(remoteId, remote);
-    this._remoteClaims.set(remoteId, platformId);
   }
 
   // Deactivate a remote from a platform.
@@ -218,8 +222,8 @@ export class PlatformManager {
     this.activateRemote(platformId, incomingId);
   }
 
-  // Update the claim so that firmware re-registration goes to the right platform.
-  // If the remote is currently active, deactivate it to the pool first.
+  // If the remote is currently active on a platform, deactivate it to the
+  // pool first, freeing it up to be activated on targetPlatformId instead.
   transferRemote(remoteId: string, targetPlatformId: string): void {
     this.getPlatform(targetPlatformId);
     for (const [platformId, platform] of this._platforms) {
@@ -228,7 +232,6 @@ export class PlatformManager {
         break;
       }
     }
-    this._remoteClaims.set(remoteId, targetPlatformId);
   }
 
   // Returns all unassigned remotes: physical remotes from the pool (sourcePlatformId: null)

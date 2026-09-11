@@ -43,6 +43,12 @@ The OLED shows the current OTA phase: "Checking for updates", "Update in progres
 
 There's no CI/CD automation for this process — it's manual by design for now. Not in scope currently, but worth automating later if release frequency picks up.
 
+## Live connection (WebSocket)
+
+Once registered, the device opens a persistent WebSocket connection to the backend (`/esp32-ws?remoteId=...`, see [ws_client.cpp](src/ws_client.cpp) and the backend's `esp-remotes.gateway.ts`), used for three things: the backend's live "connected" status for this remote (a 2s server-side heartbeat, much faster than any HTTP-polling TTL could reasonably be), immediate assignment updates when the remote is reassigned via the management page (no reboot needed), and a live feed of the other active referees' votes on the same platform (for the on-screen mini-scoreboard).
+
+**WiFi-only**: unlike the OTA and REST API paths (both routed through `networkNewClient()`, working over either WiFi or Ethernet), the `WebSocketsClient` library manages its own internal `WiFiClient` and doesn't accept an injected generic `Client*` — so this connection specifically only works over WiFi. Not an issue today since Ethernet is `-DSKIP_ETHERNET`'d off in `platformio.ini`. Ethernet as a whole needs a proper pass — beyond this the `setup()` flow also mishandles the Ethernet-success path — before it's turned on; see the pending Claude memory note.
+
 ## Tests
 
 `pio test -e native` runs a small, fast, hardware-free unit test suite against the handful of pure-logic functions (version comparison, URL parsing) — see [test/README.md](test/README.md) for what's covered, why the rest of the firmware isn't unit tested, and one-time setup on Windows.

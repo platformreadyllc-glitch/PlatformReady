@@ -6,12 +6,14 @@ import {
   KEY_MAP,
   OPENER_LOCK_CUTOFF,
   STORAGE_KEY,
+  isKbRemote,
   type ClockSnapshot,
   type Role,
   type StoredMeetConfig,
   type VoteButton,
+  type RemoteConnection,
 } from '@/lib/platformTypes'
-import { usePlatformSocket, platformAction } from '@/hooks/usePlatformSocket'
+import { usePlatformSocket, platformAction, type BackendRemote } from '@/hooks/usePlatformSocket'
 
 export interface PlatformConfig {
   platformName: string
@@ -26,11 +28,21 @@ export interface PlatformState {
   clock: ClockSnapshot
   connected: boolean | null
   attemptChangeActive: boolean
+  // Per-role physical remote connection status - null for a role with no
+  // physical remote in it right now (unassigned, or a kb-* virtual one).
+  remoteStatus: Record<Role, RemoteConnection | null>
   startBreakCountdown: (minutes: 10 | 20) => void
   toggleAttemptChange: () => void
 }
 
 const BACKEND_URL_ID = (id: string) => `platform-${id}`
+
+// null for an empty slot or a kb-* virtual remote - neither has a real
+// connection to report, so callers should skip rendering a badge for them.
+function toRemoteConnection(remote: BackendRemote | undefined): RemoteConnection | null {
+  if (!remote || isKbRemote(remote.remoteId)) return null
+  return { connected: remote.connected }
+}
 
 /**
  * @param id          Platform route param (1-based string)
@@ -183,6 +195,15 @@ export function usePlatformState(id: string | undefined, inputEnabled = true): P
 
   const attemptChangeActive = backendState?.attemptChangeActive ?? false
 
+  const remotesByRole = backendState
+    ? Object.fromEntries(Object.values(backendState.activeRemotes).map((r) => [r.role, r]))
+    : {}
+  const remoteStatus: Record<Role, RemoteConnection | null> = {
+    left: toRemoteConnection(remotesByRole['left']),
+    chief: toRemoteConnection(remotesByRole['chief']),
+    right: toRemoteConnection(remotesByRole['right']),
+  }
+
   function startBreakCountdown(minutes: 10 | 20) {
     platformAction(`/platforms/${platformId}/break`, { durationSeconds: minutes * 60 })
   }
@@ -198,6 +219,7 @@ export function usePlatformState(id: string | undefined, inputEnabled = true): P
     clock,
     connected,
     attemptChangeActive,
+    remoteStatus,
     startBreakCountdown,
     toggleAttemptChange,
   }

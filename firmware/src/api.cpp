@@ -20,6 +20,8 @@ void apiInit(const String& backendHost, const String& platformId, const String& 
 const String& apiGetHost() { return g_host; }
 uint16_t apiGetPort() { return g_port; }
 
+void apiSetPlatformId(const String& platformId) { g_platformId = platformId; }
+
 static ApiResult post(const String& path, const String& body) {
   Client* cl = networkNewClient();
   HttpClient http(*cl, g_host, g_port);

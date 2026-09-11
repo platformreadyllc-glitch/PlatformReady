@@ -10,6 +10,8 @@ import {
   useSensors,
 } from '@dnd-kit/core'
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core'
+import { io, Socket } from 'socket.io-client'
+import { Wifi } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { API } from '@/hooks/usePlatformSocket'
 import { readActivePlatforms } from '@/lib/platformHelpers'
@@ -22,6 +24,7 @@ interface RemoteSerialized {
   hardwareType?: HardwareType
   hasVibration: boolean
   hasDisplay: boolean
+  connected: boolean
 }
 
 interface PoolEntry extends RemoteSerialized {
@@ -33,6 +36,10 @@ interface PlatformFull {
   name: string | null
   activeRemotes: Record<string, RemoteSerialized>
 }
+
+// Only the fields this page actually uses from the full PlatformSerialized
+// payload the backend pushes on 'platform:updated' (see platform.gateway.ts).
+type PlatformUpdatePayload = PlatformFull
 
 interface DragData {
   remoteId: string
@@ -95,6 +102,20 @@ function blockedReason(role: string): string {
   return role === 'chief' ? 'chief hardware only' : 'side hardware only'
 }
 
+// Wifi icon, colored connected (green) vs disconnected (red) - same
+// convention as RemoteConnectionBadge.tsx, minus the L/C/R letter
+// (redundant here since role is already shown elsewhere on this page).
+// kb-* (virtual/keyboard) remotes never open a WS connection at all, so
+// callers skip rendering this for them rather than showing a
+// permanently-red icon.
+function ConnectedDot({ connected }: { connected: boolean }) {
+  return (
+    <span title={connected ? 'Connected' : 'Disconnected'} className="shrink-0 leading-none">
+      <Wifi size={12} className={connected ? 'text-green-500' : 'text-red-500'} />
+    </span>
+  )
+}
+
 // ── Active remote chip (draggable, lives inside a role slot) ─────────────────
 
 function ActiveRemote({ remote, platformId }: { remote: RemoteSerialized; platformId: string }) {
@@ -117,7 +138,10 @@ function ActiveRemote({ remote, platformId }: { remote: RemoteSerialized; platfo
         isDragging ? 'opacity-20' : ''
       }`}
     >
-      <span className="text-xs font-mono text-primary font-medium truncate">{remote.remoteId}</span>
+      <div className="flex items-center gap-1.5 min-w-0">
+        <span className="text-xs font-mono text-primary font-medium truncate">{remote.remoteId}</span>
+        {!isKb(remote.remoteId) && <ConnectedDot connected={remote.connected} />}
+      </div>
       <span className="text-xs text-secondary">{remoteLabel(remote, !isDragging)}</span>
     </div>
   )
@@ -220,7 +244,10 @@ function PoolRemote({ entry }: { entry: PoolEntry }) {
         isDragging ? 'opacity-20' : ''
       }`}
     >
-      <span className="text-xs font-mono text-primary font-medium">{entry.remoteId}</span>
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs font-mono text-primary font-medium">{entry.remoteId}</span>
+        {!isKb(entry.remoteId) && <ConnectedDot connected={entry.connected} />}
+      </div>
       <span className="text-xs text-secondary">{remoteLabel(entry, false)}</span>
     </div>
   )
@@ -269,6 +296,7 @@ function RemoteGhost({ remote }: { remote: DragData }) {
 
 export default function RemoteManagement() {
   const [platforms, setPlatforms] = useState<PlatformFull[]>([])
+  const [platformIds, setPlatformIds] = useState<string[]>([])
   const [pool, setPool] = useState<PoolEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -299,8 +327,23 @@ export default function RemoteManagement() {
       if (!poolRes.ok) throw new Error(`HTTP ${poolRes.status}`)
 
       const byId: Record<string, PlatformFull> = await platformsRes.json()
-      const all = Object.values(byId)
-      setPlatforms(activePlatformIds.length > 0 ? all.filter((p) => activePlatformIds.includes(p.platformId)) : all)
+      // Order by activePlatformIds (platform-1, -2, -3, …), not the
+      // backend's map iteration order - the concurrent /ensure calls above
+      // race, so the backend's insertion order isn't deterministic.
+      const shown =
+        activePlatformIds.length > 0
+          ? activePlatformIds.map((pid) => byId[pid]).filter((p): p is PlatformFull => p != null)
+          : Object.values(byId)
+      setPlatforms(shown)
+      // Keep the previous array identity when the id list hasn't actually
+      // changed - this runs on every fetchPlatforms() (mount + every
+      // drag-drop reassignment), and the live-updates socket effect below
+      // keys on this array, so a fresh identity here would otherwise
+      // disconnect and reconnect that socket on every reassignment.
+      const nextIds = shown.map((p) => p.platformId)
+      setPlatformIds((prev) =>
+        prev.length === nextIds.length && prev.every((id, i) => id === nextIds[i]) ? prev : nextIds,
+      )
       setPool(await poolRes.json())
     } catch (e) {
       setError((e as Error).message)
@@ -310,6 +353,48 @@ export default function RemoteManagement() {
   }, [])
 
   useEffect(() => { fetchPlatforms() }, [fetchPlatforms])
+
+  // Live updates for active remotes (including their `connected` status) -
+  // one shared socket joins every configured platform's room (mirroring
+  // usePlatformSocket.ts's 'join-platform' convention, but as a single
+  // connection covering all platforms rather than one hook per platform)
+  // and replaces that platform's activeRemotes in place on each push,
+  // rather than re-fetching the whole page every time a vote or clock tick
+  // fires somewhere.
+  useEffect(() => {
+    if (platformIds.length === 0) return
+    const socket: Socket = io(API, { forceNew: true })
+
+    socket.on('connect', () => {
+      for (const id of platformIds) socket.emit('join-platform', id)
+    })
+
+    socket.on('platform:updated', (data: PlatformUpdatePayload) => {
+      setPlatforms((prev) =>
+        prev.map((p) =>
+          p.platformId === data.platformId ? { ...p, name: data.name, activeRemotes: data.activeRemotes } : p,
+        ),
+      )
+    })
+
+    return () => { socket.disconnect() }
+  }, [platformIds])
+
+  // Pool remotes aren't scoped to any platform room, so there's no socket
+  // event to hang this off of - light polling instead. Unassigned spares'
+  // connectivity is lower-stakes than an in-use remote's, so a plain
+  // interval is proportionate rather than building a new broadcast path.
+  useEffect(() => {
+    const id = setInterval(async () => {
+      try {
+        const res = await fetch(`${API}/platforms/pool`)
+        if (res.ok) setPool(await res.json())
+      } catch {
+        // Transient network error - next tick retries.
+      }
+    }, 10000)
+    return () => clearInterval(id)
+  }, [])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
