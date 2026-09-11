@@ -1,4 +1,5 @@
 #include "ws_client.h"
+#include "scoreboard.h"
 #include "api.h"
 #include <WebSocketsClient.h>
 #include <ArduinoJson.h>
@@ -21,9 +22,8 @@ static PendingAssignment g_pendingAssignment;
 
 // Raw per-role vote strings as last received from the backend (empty =
 // no vote cast), and the wall-clock instant (millis(), 0 = unset) all
-// three most recently became simultaneously non-empty - the anchor for
-// the group-reveal delay below. Both are pure inputs to wsGetScoreboard()'s
-// derivation, not display-ready state themselves.
+// three most recently became simultaneously non-empty. Pure inputs to the
+// scoreboard.* derivation, not display-ready state.
 struct RawVotes {
   String left;
   String right;
@@ -31,14 +31,11 @@ struct RawVotes {
 };
 static RawVotes g_rawVotes;
 static unsigned long g_completeSince = 0;
-static const unsigned long REVEAL_DELAY_MS = 1000;
 
 // g_clock.remaining holds the value as of the last push, not "right now" -
-// the backend only pushes ~once/sec (while running), so displaying it
-// verbatim visibly lags the frontend, which locally interpolates a smooth
-// countdown between its own pushes (see usePlatformState.ts). g_clockAnchorMs
-// is the millis() this anchor was captured at; wsGetScoreboard() derives the
-// actual current value the same way the frontend does.
+// the backend only pushes ~once/sec (while running). g_clockAnchorMs is the
+// millis() this anchor was captured at; wsGetScoreboard() interpolates the
+// live value from there, matching the frontend (usePlatformState.ts).
 static PlatformClockDisplay g_clock;
 static unsigned long g_clockAnchorMs = 0;
 
@@ -73,17 +70,8 @@ static void handleTextFrame(uint8_t* payload, size_t length) {
     g_rawVotes.left  = left ? left : "";
     g_rawVotes.right = right ? right : "";
     g_rawVotes.chief = chief ? chief : "";
-
-    // Edge-detect the moment all three become simultaneously non-empty -
-    // this timestamp is the anchor wsGetScoreboard() times the group
-    // reveal delay against. Only set once per completion; cleared as soon
-    // as votes become incomplete again (e.g. the backend's auto-reset),
-    // so the next completion restarts the delay from scratch.
-    if (allVoted()) {
-      if (g_completeSince == 0) g_completeSince = millis();
-    } else {
-      g_completeSince = 0;
-    }
+    g_completeSince =
+        scoreboardUpdateCompleteSince(g_completeSince, allVoted(), millis());
 
     const char* clockMode  = doc["clock"]["mode"];
     const char* clockState = doc["clock"]["state"];
@@ -111,9 +99,8 @@ static void wsEvent(WStype_t type, uint8_t* payload, size_t length) {
   }
 }
 
-void wsInit(const String& remoteId, bool isEthernet) {
-  String url = "/esp32-ws?remoteId=" + remoteId +
-               "&transport=" + (isEthernet ? "ethernet" : "wifi");
+void wsInit(const String& remoteId) {
+  String url = "/esp32-ws?remoteId=" + remoteId;
   webSocket.begin(apiGetHost(), apiGetPort(), url);
   webSocket.onEvent(wsEvent);
   webSocket.setReconnectInterval(5000);
@@ -139,17 +126,19 @@ bool wsPollAssignmentChange(String& platformId, String& role) {
 
 static RefereeVoteDisplay deriveVoteDisplay(const String& raw) {
   RefereeVoteDisplay d;
-  if (raw.isEmpty()) {
-    d.state = VoteDisplayState::NOT_VOTED;
-    return d;
-  }
-  bool revealed = g_completeSince != 0 &&
-                  (millis() - g_completeSince >= REVEAL_DELAY_MS);
-  if (revealed) {
-    d.state  = VoteDisplayState::REVEALED;
-    d.button = raw;
-  } else {
-    d.state = VoteDisplayState::HIDDEN;
+  RevealPhase phase =
+      scoreboardRevealPhase(!raw.isEmpty(), g_completeSince, millis());
+  switch (phase) {
+    case RevealPhase::NOT_VOTED:
+      d.state = VoteDisplayState::NOT_VOTED;
+      break;
+    case RevealPhase::HIDDEN:
+      d.state = VoteDisplayState::HIDDEN;
+      break;
+    case RevealPhase::REVEALED:
+      d.state  = VoteDisplayState::REVEALED;
+      d.button = raw;
+      break;
   }
   return d;
 }
@@ -161,16 +150,16 @@ ScoreboardState wsGetScoreboard() {
   s.chief = deriveVoteDisplay(g_rawVotes.chief);
 
   s.clock = g_clock;
-  if (g_clock.state == "RUNNING") {
-    float elapsedSec = (millis() - g_clockAnchorMs) / 1000.0f;
-    s.clock.remaining = g_clock.remaining - elapsedSec;
-    if (s.clock.remaining < 0) s.clock.remaining = 0;
-  }
+  s.clock.remaining = scoreboardInterpolateClock(
+      g_clock.remaining, g_clockAnchorMs, millis(), g_clock.state == "RUNNING");
   return s;
 }
 
 void wsOptimisticClockToggle() {
-  g_clock.state     = (g_clock.state == "RUNNING") ? "IDLE" : "RUNNING";
-  g_clock.remaining = g_clock.duration;
+  ClockToggle t = scoreboardToggleClock(g_clock.state == "RUNNING",
+                                        g_clock.duration);
+  if (!t.changed) return;  // no real clock data yet - let the push drive it
+  g_clock.state     = t.running ? "RUNNING" : "IDLE";
+  g_clock.remaining = t.remaining;
   g_clockAnchorMs   = millis();
 }

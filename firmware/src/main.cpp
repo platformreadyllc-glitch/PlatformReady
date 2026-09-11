@@ -267,7 +267,7 @@ void loop() {
 
       // Opens the persistent connection used for liveness, live assignment
       // sync, and the mini-scoreboard - see ws_client.h.
-      wsInit(cfg.serial, networkIsEthernet());
+      wsInit(cfg.serial);
 
       // Don't make freshly-booted devices wait up to OTA_CHECK_INTERVAL_MS
       // for their first update check.

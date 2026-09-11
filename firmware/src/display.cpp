@@ -1,4 +1,5 @@
 #include "display.h"
+#include "scoreboard.h"
 #include "pins.h"
 #include <Wire.h>
 #include <U8g2lib.h>
@@ -88,17 +89,11 @@ void displayShowActive(const String& platformId, const String& role, const Strin
 
 // Formats seconds as "M:SS" (no leading zero on minutes - clocks here
 // range from a 60s attempt up to a 20min break, never triple-digit
-// minutes). Truncates rather than rounds - matches the frontend's own
-// formatTime() (frontend/src/lib/platformHelpers.ts, Math.floor) exactly,
-// which is what makes a fresh 60s clock read "0:59" almost immediately
-// rather than sitting on "1:00" for most of the first second. Negative
-// input (shouldn't happen - backend clamps to 0) still renders sensibly
-// rather than a garbled negative string.
+// minutes). The truncating split lives in scoreboard.cpp (host-tested,
+// matches the frontend's Math.floor formatTime).
 static String formatClock(float remainingSeconds) {
-  if (remainingSeconds < 0) remainingSeconds = 0;
-  int totalSeconds = (int)remainingSeconds;
-  int minutes = totalSeconds / 60;
-  int seconds = totalSeconds % 60;
+  int minutes, seconds;
+  scoreboardClockParts(remainingSeconds, minutes, seconds);
   char buf[8];
   snprintf(buf, sizeof(buf), "%d:%02d", minutes, seconds);
   return String(buf);
