@@ -23,3 +23,8 @@ export type Decision = 'good' | 'bad';
 // `role`, which is the current platform/position assignment.
 export const VALID_HARDWARE_TYPES = new Set(['side', 'chief']);
 export type HardwareType = 'side' | 'chief';
+
+// Which physical network interface a remote is currently connected over.
+// null until the remote's first WS connection reports it (or if it's
+// running firmware old enough not to send it at all).
+export type Transport = 'wifi' | 'ethernet' | null;

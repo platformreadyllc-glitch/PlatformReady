@@ -1,4 +1,4 @@
-import { Role, Button, HardwareType } from './enums';
+import { Role, Button, HardwareType, Transport } from './enums';
 
 export interface RemoteSerialized {
   remoteId: string;
@@ -13,6 +13,7 @@ export interface RemoteSerialized {
   buttonCount: number;
   availableButtons: Button[];
   connected: boolean;
+  transport: Transport;
   batteryLevel: number | null;
   lastButtonPressed: Button | null;
   displayText: string;
@@ -27,6 +28,7 @@ export class Remote {
   hasVibration: boolean;
   hasDisplay: boolean;
   connected: boolean = false;
+  transport: Transport = null;
   batteryLevel: number | null = null;
   lastButtonPressed: Button | null = null;
   displayText: string = '';
@@ -73,12 +75,14 @@ export class Remote {
     this.lastButtonPressed = buttonName;
   }
 
-  connect(): void {
+  connect(transport: Transport = null): void {
     this.connected = true;
+    this.transport = transport;
   }
 
   disconnect(): void {
     this.connected = false;
+    this.transport = null;
   }
 
   setBatteryLevel(percent: number): void {
@@ -107,6 +111,7 @@ export class Remote {
       buttonCount: this.buttonCount,
       availableButtons: this.availableButtons,
       connected: this.connected,
+      transport: this.transport,
       batteryLevel: this.batteryLevel,
       lastButtonPressed: this.lastButtonPressed,
       displayText: this.displayText,
