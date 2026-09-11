@@ -37,16 +37,24 @@ bool networkTryEthernet() {
 #ifdef SKIP_ETHERNET
   return false;
 #else
-  generateMac();
+  // The reset pulse + SPI/chip init only need to happen once - called
+  // again later (E2's runtime WiFi-fallback recovery path, re-probing
+  // whether a replugged cable can now reach the backend), re-pulsing
+  // ETH_RST would drop the W5500 mid-negotiation for no reason.
+  static bool alreadyInitialized = false;
+  if (!alreadyInitialized) {
+    generateMac();
 
-  pinMode(ETH_RST, OUTPUT);
-  digitalWrite(ETH_RST, LOW);
-  delay(100);
-  digitalWrite(ETH_RST, HIGH);
-  delay(200);
+    pinMode(ETH_RST, OUTPUT);
+    digitalWrite(ETH_RST, LOW);
+    delay(100);
+    digitalWrite(ETH_RST, HIGH);
+    delay(200);
 
-  SPI.begin();  // uses ESP32 VSPI defaults: SCLK=18, MISO=19, MOSI=23
-  Ethernet.init(ETH_CS);
+    SPI.begin();  // uses ESP32 VSPI defaults: SCLK=18, MISO=19, MOSI=23
+    Ethernet.init(ETH_CS);
+    alreadyInitialized = true;
+  }
 
   if (Ethernet.linkStatus() != LinkON) return false;
 
@@ -54,6 +62,19 @@ bool networkTryEthernet() {
 
   g_ethernet = true;
   return true;
+#endif
+}
+
+// Raw link-presence read, usable regardless of the currently active
+// transport - e.g. to notice a cable replug while running on the WiFi
+// fallback. Safe to call any time after the first networkTryEthernet()
+// call (which performs the one-time SPI/chip init above, independent of
+// whether the link was up yet at that point).
+bool networkEthernetLinkPresent() {
+#ifdef SKIP_ETHERNET
+  return false;
+#else
+  return Ethernet.linkStatus() == LinkON;
 #endif
 }
 

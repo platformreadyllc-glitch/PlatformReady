@@ -7,6 +7,12 @@
 // For WiFi, always returns true (WiFiManager blocks until connected or portal is dismissed).
 bool networkTryEthernet();
 
+// Raw Ethernet.linkStatus() read, independent of which transport is
+// currently active - safe to call any time after the first
+// networkTryEthernet() call, including while running on WiFi (e.g. to
+// notice a cable replug). Always false when built with -DSKIP_ETHERNET.
+bool networkEthernetLinkPresent();
+
 // Configures the WiFi radio's power/reconnect behavior. Safe to call
 // regardless of current transport - does not touch which transport is
 // active (see networkFallbackToWiFi() for that).

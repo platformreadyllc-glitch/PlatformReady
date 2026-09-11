@@ -13,6 +13,7 @@
 #include "version.h"
 #include "watchdog.h"
 #include "ws_client.h"
+#include "transport_fsm.h"
 
 static RemoteConfig cfg;
 static bool registered = false;
@@ -22,6 +23,12 @@ static unsigned long lastOtaCheck = 0;
 static unsigned long lastActivityMs = 0;
 static unsigned long disconnectedSinceMs = 0;
 static bool wasDisconnected = false;
+// State for transportDecide() (transport_fsm.h) - held across loop()
+// iterations. Initial values are harmless: an apparent edge on the very
+// first call just starts the debounce window.
+static bool ethLastLinkUp = false;
+static unsigned long ethLinkStableSinceMs = 0;
+static unsigned long lastEthRecheckMs = 0;
 static unsigned long lastScoreboardTick = 0;
 static unsigned long lastStatusChangeMs = 0;
 // How long a transient status word (WHITE, ERR, CLOCK, ...) stays on
@@ -201,6 +208,36 @@ void loop() {
   // Non-blocking regardless of WiFi state, and a no-op before wsInit() has
   // run - safe to pump unconditionally ahead of the network gate below.
   wsLoop();
+
+  // ── Runtime Ethernet<->WiFi transport fallback ──────────────────────────
+  // Every iteration, independent of the networkConnected() gate below - a
+  // cable pull needs to be caught immediately (not just once "No network"
+  // has already kicked in), and a replug needs to be noticed even while
+  // sitting in that branch's own delay(2000) loop.
+  bool ethLinkUp = networkEthernetLinkPresent();
+  switch (transportDecide(networkIsEthernet(), ethLinkUp, ethLastLinkUp,
+                          ethLinkStableSinceMs, lastEthRecheckMs, millis())) {
+    case TransportAction::SWITCH_TO_WIFI:
+      Serial.println("[loop] Ethernet lost - falling back to WiFi");
+      networkFallbackToWiFi();
+      networkBeginWiFi();
+      networkAssociateWiFiNonInteractive();
+      wsNotifyTransportChanged();
+      displayShowError("Eth lost, WiFi...");
+      break;
+    case TransportAction::SWITCH_TO_ETHERNET:
+      Serial.println("[loop] Ethernet link back - reclaiming from WiFi");
+      // WiFi is deliberately left associated-but-idle on success rather
+      // than torn down (no WiFi.disconnect()) - avoids flicker if the
+      // cable turns out to be marginal, and matches the boot-time
+      // decision to never proactively manage WiFi off.
+      if (networkTryEthernet()) {
+        wsNotifyTransportChanged();
+      }
+      break;
+    case TransportAction::STAY:
+      break;
+  }
 
   if (!networkConnected()) {
     if (disconnectedSinceMs == 0) disconnectedSinceMs = millis();

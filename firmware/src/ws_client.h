@@ -14,6 +14,13 @@ void wsInit(const String& remoteId);
 // own connection on its own schedule.
 void wsLoop();
 
+// Forces the WS connection to drop and reconnect immediately - call when
+// the active transport (WiFi/Ethernet) changes, so the client picks up
+// the new transport right away instead of waiting out its own dead-
+// connection detection. No-op if wsInit() hasn't run yet (mirrors
+// wsLoop()'s own guard).
+void wsNotifyTransportChanged();
+
 // Returns true and fills platformId/role if a new assignment arrived since
 // the last call (and clears the pending flag) - empty strings mean
 // "unassigned". False if nothing changed since the last call. Unlike the

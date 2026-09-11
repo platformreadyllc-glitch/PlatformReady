@@ -116,6 +116,21 @@ void wsLoop() {
   webSocket.loop();
 }
 
+void wsNotifyTransportChanged() {
+  if (!g_started) return;
+  // WebSocketsClient::loop() reconnects immediately (not after its usual
+  // setReconnectInterval() throttle) once already-connected, and always
+  // constructs a fresh underlying network client on reconnect - so a
+  // plain disconnect() here is all that's needed to make it pick up
+  // whichever transport is now active, once the WEBSOCKETS_NETWORK_TYPE=
+  // NETWORK_CUSTOM wrapper (ws_network_client.cpp) lands and makes that
+  // client transport-aware. Until then this is WiFi-only regardless (see
+  // the comment above), so calling this just forces a prompt reconnect
+  // over the same transport - still a real improvement (faster recovery
+  // on a network event) but not yet the actual transport switch.
+  webSocket.disconnect();
+}
+
 bool wsPollAssignmentChange(String& platformId, String& role) {
   if (!g_pendingAssignment.pending) return false;
   platformId = g_pendingAssignment.platformId;
