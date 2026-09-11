@@ -78,9 +78,9 @@ export function PlatformCard({ numericId }: { numericId: number }) {
     <div className="bg-surface border border-border rounded-xl flex flex-col overflow-hidden shadow">
       {/* Header */}
       <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span className="text-sm font-semibold text-primary truncate">{config.platformName}</span>
-          <div className="flex items-center gap-1.5 shrink-0">
+        <span className="text-sm font-semibold text-primary truncate">{config.platformName}</span>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5">
             {(['left', 'chief', 'right'] as const).map(
               (role) =>
                 remoteStatus[role] && (
@@ -88,9 +88,6 @@ export function PlatformCard({ numericId }: { numericId: number }) {
                 ),
             )}
           </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs text-secondary">{config.dayStr}</span>
           <span
             className={`w-2 h-2 rounded-full ${connected === false ? 'bg-red-500' : connected === true ? 'bg-green-500' : 'bg-secondary'}`}
             title={connected === false ? 'Disconnected' : connected === true ? 'Connected' : 'Connecting…'}
