@@ -125,11 +125,25 @@ void wsInit(const String& remoteId, bool isEthernet) {
   g_remoteId = remoteId;
   webSocket.begin(apiGetHost(), apiGetPort(), wsUrl(remoteId, isEthernet));
   webSocket.onEvent(wsEvent);
-  webSocket.setReconnectInterval(5000);
+  // Was 5000ms - tightened alongside the heartbeat below, for the same
+  // reason (see its comment): the first reconnect attempt after a
+  // heartbeat-triggered disconnect still has to wait out this interval.
+  webSocket.setReconnectInterval(2000);
   // The backend's own 2s ping keeps its liveness view current regardless;
-  // this is purely for the client's own connection to notice a dead
-  // backend and cycle instead of hanging silently.
-  webSocket.enableHeartbeat(15000, 3000, 2);
+  // this is for the client's own connection to notice a dead/stale
+  // connection and cycle instead of hanging silently - previously
+  // (15000, 3000, 2), ~20s+ worst case to notice. That was known and
+  // deliberately deferred (see the project_ws_reconnect_latency memory
+  // note) since it rarely mattered on WiFi - but confirmed via live
+  // Ethernet testing to matter a lot there: the W5500's TCP stack doesn't
+  // reliably detect an abrupt server-side close (tcp->connected() stays
+  // true even once the backend has already dropped the connection), so
+  // this client-side heartbeat is the ONLY thing that ever notices and
+  // forces a reconnect - and 20s+ to do so, repeatedly, is a real problem
+  // for "fast and reliable". Tightened to a ~10s worst case. Still cheap
+  // either way - ping/pong frames are a few bytes, nothing next to normal
+  // vote/clock traffic even at this cadence.
+  webSocket.enableHeartbeat(5000, 3000, 2);
   g_started = true;
 }
 
