@@ -155,6 +155,15 @@ describe('EspRemotesGateway connection handling', () => {
 
     expect(ws.isAlive).toBe(true);
   });
+
+  it('a socket error terminates just that connection instead of throwing', () => {
+    const { wss } = boot();
+    const ws = makeFakeWs();
+    wss.emit('connection', ws, req('?remoteId=r1'));
+
+    expect(() => ws.fire('error')).not.toThrow();
+    expect(ws.terminate).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('EspRemotesGateway heartbeat', () => {

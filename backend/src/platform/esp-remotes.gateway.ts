@@ -96,6 +96,18 @@ export class EspRemotesGateway
         ws.isAlive = true;
       });
 
+      // Without this, a malformed frame (a buggy/corrupted client - this
+      // is exactly how a real firmware bug surfaced: a bad Ethernet-path
+      // write() elsewhere corrupted the frame stream and the `ws` package
+      // threw "Invalid WebSocket frame: RSV1 must be clear") is an
+      // unhandled 'error' event, which crashes the entire backend process
+      // - wiping all in-memory state for every remote/platform, not just
+      // this one connection. Log and drop just this connection instead.
+      ws.on('error', (err) => {
+        console.error(`[esp-remotes] WS error for ${remoteId}:`, err);
+        ws.terminate();
+      });
+
       ws.on('close', () => {
         // Only clear state if this socket is still the one on record - a
         // superseded old socket closing shouldn't stomp on a newer
