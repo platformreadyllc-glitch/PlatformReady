@@ -33,39 +33,101 @@ static void generateMac() {
   g_mac[5] = (chipId >> 40) & 0xFF;
 }
 
-bool networkTryEthernet() {
+bool networkTryEthernet(unsigned long dhcpTimeoutMs) {
 #ifdef SKIP_ETHERNET
   return false;
 #else
-  generateMac();
+  // The reset pulse + SPI/chip init only need to happen once - called
+  // again later (E2's runtime WiFi-fallback recovery path, re-probing
+  // whether a replugged cable can now reach the backend), re-pulsing
+  // ETH_RST would drop the W5500 mid-negotiation for no reason.
+  static bool alreadyInitialized = false;
+  if (!alreadyInitialized) {
+    generateMac();
 
-  pinMode(ETH_RST, OUTPUT);
-  digitalWrite(ETH_RST, LOW);
-  delay(100);
-  digitalWrite(ETH_RST, HIGH);
-  delay(200);
+    pinMode(ETH_RST, OUTPUT);
+    digitalWrite(ETH_RST, LOW);
+    delay(100);
+    digitalWrite(ETH_RST, HIGH);
+    delay(200);
 
-  SPI.begin();  // uses ESP32 VSPI defaults: SCLK=18, MISO=19, MOSI=23
-  Ethernet.init(ETH_CS);
+    SPI.begin();  // uses ESP32 VSPI defaults: SCLK=18, MISO=19, MOSI=23
+    Ethernet.init(ETH_CS);
+    // Ethernet.init() only records which pin is chip-select
+    // (W5100Class::setSS()) - it does NOT actually probe/reset the W5x00
+    // chip over SPI. That real init (chip-type detection, buffer setup)
+    // only otherwise happens inside EthernetClass::begin(), via
+    // W5100.init() - too late for us: W5100Class::getLinkStatus() reads
+    // UNKNOWN (not LinkOFF), not the real PHY register, until
+    // W5100Class::init() has run at least once. Without this, the
+    // linkStatus() check right below always failed - cable or no cable -
+    // and Ethernet.begin() (the only thing that would have actually set
+    // it up) was never reached to fix that for next time either.
+    // W5100.init() is idempotent (a no-op if already initialized, per its
+    // own source) - Ethernet.begin() below will just find it already
+    // done.
+    W5100.init();
+    alreadyInitialized = true;
+  }
 
   if (Ethernet.linkStatus() != LinkON) return false;
 
-  if (Ethernet.begin(g_mac, 10000) != 1) return false;
+  if (Ethernet.begin(g_mac, dhcpTimeoutMs) != 1) return false;
 
   g_ethernet = true;
   return true;
 #endif
 }
 
+// Raw link-presence read, usable regardless of the currently active
+// transport - e.g. to notice a cable replug while running on the WiFi
+// fallback. Safe to call any time after the first networkTryEthernet()
+// call (which performs the one-time SPI/chip init above, independent of
+// whether the link was up yet at that point).
+bool networkEthernetLinkPresent() {
+#ifdef SKIP_ETHERNET
+  return false;
+#else
+  return Ethernet.linkStatus() == LinkON;
+#endif
+}
+
 bool networkBeginWiFi() {
-  g_ethernet = false;
   // Modem-sleep power saving is a common cause of silent ESP32 WiFi
   // drops; setAutoReconnect tells the driver to attempt reconnection on
   // its own when a disconnect event fires. Both are driver-level — the
   // active retry in main.cpp's loop() is still needed as a backstop for
   // disconnects the driver doesn't auto-recover from on its own.
+  //
+  // Deliberately does NOT touch g_ethernet - it used to unconditionally
+  // reset it to false, which broke Ethernet even when this was called
+  // only to configure the WiFi radio on the WiFi-only boot path. It's
+  // safe to call regardless of current transport now.
   WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
+  return true;
+}
+
+// The only place that flips g_ethernet back to false at runtime (after
+// boot's initial networkTryEthernet()/g_ethernet=true). Called from
+// exactly one place: main.cpp's loop() runtime Ethernet-loss-to-WiFi
+// fallback transition - never at boot, where the WiFi-only path simply
+// never sets g_ethernet true in the first place.
+bool networkFallbackToWiFi() {
+  g_ethernet = false;
+  return true;
+}
+
+// Non-interactive WiFi association for the runtime fallback path: a bare
+// WiFi.begin() reconnects using ESP32-IDF-NVS-persisted STA credentials
+// (the same pattern WiFiManager's own wifiConnectDefault() uses
+// internally), rather than blocking on the captive-portal UI - which
+// would be wrong for a headless mid-meet remote. Non-blocking: kicks off
+// the association attempt and returns immediately; the actual connection
+// is observed later via networkConnected()/WiFi.status(), same as the
+// existing WiFi.reconnect() backstop in main.cpp's loop().
+bool networkAssociateWiFiNonInteractive() {
+  WiFi.begin();
   return true;
 }
 
@@ -100,6 +162,42 @@ Client* networkNewClient() {
   }
   g_wifiClient = WiFiClient();
   return &g_wifiClient;
+}
+
+// ── WS client factory ─────────────────────────────────────────────────────
+// Separate, long-lived instances dedicated to the persistent WS connection
+// (ws_network_client.cpp) - unlike g_ethClient/g_wifiClient above, these are
+// NOT reset to a fresh object on every call, since a WS session needs one
+// stable underlying socket for its whole lifetime, not a fresh one per
+// one-shot REST/OTA request.
+
+static EthernetClient g_ethWsClient;
+static WiFiClient     g_wifiWsClient;
+
+// WebSocketsClient (via ws_network_client.cpp) calls the 3-arg
+// connect(host, port, timeout_ms) on ESP32, but the generic Client
+// interface only declares the 2-arg overload - EthernetClient has no
+// 3-arg overload at all, and while WiFiClient does, it's not reachable
+// through a plain Client* the way ws_network_client.cpp holds these. Both
+// transports' connect timeouts are pre-configured once here instead
+// (where the concrete types are in scope), approximating the WS library's
+// own WEBSOCKETS_TCP_TIMEOUT (5000ms, WebSockets.h).
+Client* networkEthernetWsClient() {
+  static bool configured = false;
+  if (!configured) {
+    g_ethWsClient.setConnectionTimeout(5000);
+    configured = true;
+  }
+  return &g_ethWsClient;
+}
+
+Client* networkWiFiWsClient() {
+  static bool configured = false;
+  if (!configured) {
+    g_wifiWsClient.setTimeout(5);  // seconds - matches the 5000ms above
+    configured = true;
+  }
+  return &g_wifiWsClient;
 }
 
 // ── Ethernet config web server (webConfigRunEthernet) ─────────────────────────

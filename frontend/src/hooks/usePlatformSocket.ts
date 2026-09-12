@@ -10,6 +10,7 @@ export interface BackendRemote {
   remoteId: string
   role: string
   connected: boolean
+  transport: 'wifi' | 'ethernet' | null
 }
 
 export interface BackendPlatformState {

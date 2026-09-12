@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { PlatformManager } from './models/platform-manager';
 import { Platform } from './models/platform';
-import { Button, Role, ClockMode, ClockState } from './models/enums';
+import { Button, Role, ClockMode, ClockState, Transport } from './models/enums';
 import { CreatePlatformDto } from './dto/create-platform.dto';
 import { RegisterRemoteDto } from './dto/register-remote.dto';
 import { RegisterPhysicalRemoteDto } from './dto/register-physical-remote.dto';
@@ -53,10 +53,10 @@ export class PlatformService {
     return this.manager.findRemote(remoteId);
   }
 
-  markRemoteConnected(remoteId: string): void {
+  markRemoteConnected(remoteId: string, transport: Transport = null): void {
     const remote = this.manager.findRemote(remoteId);
     if (!remote) return;
-    remote.connect();
+    remote.connect(transport);
     this.emitIfActive(remote, true);
   }
 

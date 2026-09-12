@@ -226,6 +226,18 @@ describe('PlatformService ESP32 WS integration', () => {
     expect(gw.emitPlatformUpdate).toHaveBeenCalled();
   });
 
+  it('markRemoteConnected records the reported transport, markRemoteDisconnected clears it', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw, makeLc());
+    svc.ensurePlatform({ platformId: 'p1' });
+
+    svc.markRemoteConnected('kb-left', 'ethernet');
+    expect(svc.findRemote('kb-left')?.transport).toBe('ethernet');
+
+    svc.markRemoteDisconnected('kb-left');
+    expect(svc.findRemote('kb-left')?.transport).toBe(null);
+  });
+
   it('markRemoteConnected on an unknown remote is a no-op', () => {
     const gw = makeGateway();
     const svc = new PlatformService(gw, makeLc());

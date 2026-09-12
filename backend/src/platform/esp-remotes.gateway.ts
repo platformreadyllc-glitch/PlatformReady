@@ -10,12 +10,16 @@ import type { IncomingMessage } from 'http';
 import type { Duplex } from 'stream';
 import { WebSocketServer, WebSocket } from 'ws';
 import { PlatformService } from './platform.service';
-import { Role, Button } from './models/enums';
+import { Role, Button, Transport } from './models/enums';
 import { PlatformClockSerialized } from './models/platform-clock';
 
 type LiveSocket = WebSocket & { isAlive?: boolean };
 
 const ESP_WS_PATH = '/esp32-ws';
+
+function parseTransport(raw: string | null): Transport {
+  return raw === 'wifi' || raw === 'ethernet' ? raw : null;
+}
 
 // How often each connection is pinged, and therefore roughly how long a
 // power-cycled remote's connected status takes to flip back to false (worst
@@ -68,10 +72,9 @@ export class EspRemotesGateway
     httpServer.on('upgrade', this.upgradeHandler);
 
     this.wss.on('connection', (ws: LiveSocket, req: IncomingMessage) => {
-      const remoteId = new URL(
-        req.url ?? '',
-        'http://esp32-ws.local',
-      ).searchParams.get('remoteId');
+      const url = new URL(req.url ?? '', 'http://esp32-ws.local');
+      const remoteId = url.searchParams.get('remoteId');
+      const transport = parseTransport(url.searchParams.get('transport'));
 
       if (!remoteId || !this.platformService.findRemote(remoteId)) {
         ws.close(4000, 'unknown remote');
@@ -86,11 +89,23 @@ export class EspRemotesGateway
       if (superseded && superseded !== ws) superseded.terminate();
 
       this.connections.set(remoteId, ws);
-      this.platformService.markRemoteConnected(remoteId);
+      this.platformService.markRemoteConnected(remoteId, transport);
 
       ws.isAlive = true;
       ws.on('pong', () => {
         ws.isAlive = true;
+      });
+
+      // Without this, a malformed frame (a buggy/corrupted client - this
+      // is exactly how a real firmware bug surfaced: a bad Ethernet-path
+      // write() elsewhere corrupted the frame stream and the `ws` package
+      // threw "Invalid WebSocket frame: RSV1 must be clear") is an
+      // unhandled 'error' event, which crashes the entire backend process
+      // - wiping all in-memory state for every remote/platform, not just
+      // this one connection. Log and drop just this connection instead.
+      ws.on('error', (err) => {
+        console.error(`[esp-remotes] WS error for ${remoteId}:`, err);
+        ws.terminate();
       });
 
       ws.on('close', () => {

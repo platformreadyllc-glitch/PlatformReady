@@ -92,8 +92,21 @@ describe('EspRemotesGateway connection handling', () => {
 
     wss.emit('connection', ws, req('?remoteId=r1'));
 
-    expect(service.markRemoteConnected).toHaveBeenCalledWith('r1');
+    expect(service.markRemoteConnected).toHaveBeenCalledWith('r1', null);
     expect(connections.get('r1')).toBe(ws);
+  });
+
+  it.each([
+    ['wifi', 'wifi'],
+    ['ethernet', 'ethernet'],
+    ['bogus', null],
+  ] as const)('parses ?transport=%s as %s', (raw, expected) => {
+    const { wss, service } = boot();
+    const ws = makeFakeWs();
+
+    wss.emit('connection', ws, req(`?remoteId=r1&transport=${raw}`));
+
+    expect(service.markRemoteConnected).toHaveBeenCalledWith('r1', expected);
   });
 
   it('terminates the superseded socket on reconnect', () => {
@@ -141,6 +154,15 @@ describe('EspRemotesGateway connection handling', () => {
     ws.fire('pong');
 
     expect(ws.isAlive).toBe(true);
+  });
+
+  it('a socket error terminates just that connection instead of throwing', () => {
+    const { wss } = boot();
+    const ws = makeFakeWs();
+    wss.emit('connection', ws, req('?remoteId=r1'));
+
+    expect(() => ws.fire('error')).not.toThrow();
+    expect(ws.terminate).toHaveBeenCalledTimes(1);
   });
 });
 
