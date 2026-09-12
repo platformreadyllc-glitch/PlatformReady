@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include "battery_levels.h"
 
 void displayInit();
 void displayShowConnecting(const String& serial, const String& type);
@@ -20,7 +21,8 @@ struct ScoreVote {
 
 void displayShowScoreboard(const String& status, const ScoreVote& left,
                             const ScoreVote& chief, const ScoreVote& right,
-                            float clockRemaining, bool isEthernet);
+                            float clockRemaining, bool isEthernet,
+                            BatteryLevel batteryLevel);
 
 // OTA update status screens (see ota.cpp).
 void displayShowOtaChecking();

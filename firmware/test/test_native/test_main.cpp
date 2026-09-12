@@ -8,6 +8,7 @@
 #include "../../src/host_port.h"
 #include "../../src/url_utils.h"
 #include "../../src/scoreboard.h"
+#include "../../src/battery_levels.h"
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -186,6 +187,26 @@ void test_toggleClock_noop_without_known_duration(void) {
   TEST_ASSERT_FALSE(t.changed);  // no real clock data yet
 }
 
+// ── battery_levels.cpp: voltage-to-level lookup ────────────────────────────
+
+void test_batteryLevel_full_at_and_above_threshold(void) {
+  TEST_ASSERT_EQUAL(BatteryLevel::BATT_FULL, batteryLevelFromVoltage(3.9f));
+  TEST_ASSERT_EQUAL(BatteryLevel::BATT_FULL, batteryLevelFromVoltage(4.2f));
+}
+
+void test_batteryLevel_medium_between_thresholds(void) {
+  TEST_ASSERT_EQUAL(BatteryLevel::BATT_MEDIUM, batteryLevelFromVoltage(3.6f));
+  TEST_ASSERT_EQUAL(BatteryLevel::BATT_MEDIUM, batteryLevelFromVoltage(3.75f));
+  // Just under the FULL threshold - still MEDIUM, not FULL.
+  TEST_ASSERT_EQUAL(BatteryLevel::BATT_MEDIUM, batteryLevelFromVoltage(3.89f));
+}
+
+void test_batteryLevel_low_below_medium_threshold(void) {
+  TEST_ASSERT_EQUAL(BatteryLevel::BATT_LOW, batteryLevelFromVoltage(3.59f));
+  TEST_ASSERT_EQUAL(BatteryLevel::BATT_LOW, batteryLevelFromVoltage(3.0f));
+  TEST_ASSERT_EQUAL(BatteryLevel::BATT_LOW, batteryLevelFromVoltage(0.0f));
+}
+
 int main(int argc, char** argv) {
   UNITY_BEGIN();
 
@@ -218,6 +239,10 @@ int main(int argc, char** argv) {
   RUN_TEST(test_clockParts_truncates);
   RUN_TEST(test_toggleClock_flips_and_resets_to_duration);
   RUN_TEST(test_toggleClock_noop_without_known_duration);
+
+  RUN_TEST(test_batteryLevel_full_at_and_above_threshold);
+  RUN_TEST(test_batteryLevel_medium_between_thresholds);
+  RUN_TEST(test_batteryLevel_low_below_medium_threshold);
 
   return UNITY_END();
 }

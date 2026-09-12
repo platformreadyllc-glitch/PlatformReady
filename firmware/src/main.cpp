@@ -13,6 +13,7 @@
 #include "version.h"
 #include "watchdog.h"
 #include "ws_client.h"
+#include "battery.h"
 
 static RemoteConfig cfg;
 static bool registered = false;
@@ -89,7 +90,7 @@ static void refreshDisplay() {
                                    : formatPlatformRole(cfg.platformId, cfg.role);
   displayShowScoreboard(bottomText, toScoreVote(s.left), toScoreVote(s.chief),
                          toScoreVote(s.right), s.clock.remaining,
-                         networkIsEthernet());
+                         networkIsEthernet(), batteryGetLevel());
 }
 
 // ── WiFiManager portal with custom params for full config ────────────────────
@@ -146,6 +147,8 @@ void setup() {
   displayInit();
   Serial.println("[boot] displayInit done");
 
+  batteryInit();
+
   // Load saved config (may be empty on first boot)
   Serial.println("[boot] configLoad");
   configLoad(cfg);
@@ -198,6 +201,9 @@ void loop() {
   // Non-blocking regardless of WiFi state, and a no-op before wsInit() has
   // run - safe to pump unconditionally ahead of the network gate below.
   wsLoop();
+  // Samples on its own ~2s schedule internally - cheap to call every
+  // iteration, same pattern as wsLoop() above.
+  batteryLoop();
 
   if (!networkConnected()) {
     if (disconnectedSinceMs == 0) disconnectedSinceMs = millis();
