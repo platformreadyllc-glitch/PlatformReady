@@ -1,6 +1,7 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Param, Body } from '@nestjs/common';
 import { PlatformService } from './platform.service';
 import { RegisterPhysicalRemoteDto } from './dto/register-physical-remote.dto';
+import { ReportDiagnosticsDto } from './dto/report-diagnostics.dto';
 
 // Top-level (not platform-scoped) routes for physical remotes that haven't
 // been assigned to a platform yet — registration happens once by remoteId
@@ -13,5 +14,13 @@ export class RemotesController {
   @Post()
   registerPhysicalRemote(@Body() dto: RegisterPhysicalRemoteDto) {
     return this.platformService.registerPhysicalRemote(dto);
+  }
+
+  @Post(':remoteId/diagnostics')
+  reportDiagnostics(
+    @Param('remoteId') remoteId: string,
+    @Body() dto: ReportDiagnosticsDto,
+  ) {
+    this.platformService.reportDiagnostics(remoteId, dto);
   }
 }

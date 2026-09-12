@@ -37,3 +37,11 @@ ApiRemoteState apiRegisterRemote(const String& hardwareType);
 
 ApiResult apiCastVote(const String& button);   // "white", "red", "blue", "yellow"
 ApiResult apiPressClockButton();
+
+// Temporary debugging tool for the WS-over-Ethernet "connects once, then
+// stuck disconnected forever" bug - reported over REST (which keeps
+// working even while the WS connection is stuck), so it's observable
+// throughout a stuck period rather than only at the last successful WS
+// connect. Fire-and-forget: result isn't checked by callers. Remove once
+// that bug is confirmed fixed and this stops earning its keep.
+void apiReportDiagnostics(uint32_t freeHeap, unsigned long uptimeMs, bool wsConnectedLocally);

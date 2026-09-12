@@ -18,17 +18,21 @@ static bool g_started = false;
 // transport switch, not just at initial connect).
 static String g_remoteId;
 
-// batteryVoltage is a one-shot diagnostic snapshot as of connect time, not
-// a live telemetry feed - there's no serial/USB access to these units to
-// check readings directly otherwise, and reconnects (transport switches,
-// drops) happen often enough for this to stay reasonably fresh without
-// needing its own separate reporting channel. Remove once a real
-// fuel-gauge chip replaces the current lookup-table approach and this
-// stops being a "does this even read sensibly" question.
+// batteryVoltage/freeHeap are one-shot diagnostic snapshots as of connect
+// time, not a live telemetry feed - there's no serial/USB access to these
+// units to check readings directly otherwise, and reconnects (transport
+// switches, drops) happen often enough for this to stay reasonably fresh
+// without needing its own separate reporting channel. freeHeap is here
+// specifically to chase the WS-over-Ethernet "connects once, then stuck
+// disconnected forever" bug - a heap leak in the reconnect cycle (e.g. a
+// `new` silently failing once heap runs low, common on Arduino/ESP-IDF
+// with exceptions disabled) would produce exactly that symptom too, and
+// can't be ruled out from reading source alone.
 static String wsUrl(const String& remoteId, bool isEthernet) {
   return "/esp32-ws?remoteId=" + remoteId +
          "&transport=" + (isEthernet ? "ethernet" : "wifi") +
-         "&batteryVoltage=" + String(batteryGetVoltage(), 2);
+         "&batteryVoltage=" + String(batteryGetVoltage(), 2) +
+         "&freeHeap=" + String(ESP.getFreeHeap());
 }
 
 struct PendingAssignment {
@@ -132,6 +136,10 @@ void wsInit(const String& remoteId, bool isEthernet) {
 void wsLoop() {
   if (!g_started) return;
   webSocket.loop();
+}
+
+bool wsIsConnected() {
+  return g_started && webSocket.isConnected();
 }
 
 void wsNotifyTransportChanged(bool isEthernet) {

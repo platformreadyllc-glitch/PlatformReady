@@ -19,6 +19,14 @@ void wsInit(const String& remoteId, bool isEthernet);
 // own connection on its own schedule.
 void wsLoop();
 
+// The device's own belief about whether the WS connection is currently up
+// - false before wsInit() has run. Used for the temporary diagnostics
+// reporting (main.cpp/api.cpp) chasing the WS-over-Ethernet stuck-
+// disconnected bug, to tell client-side-stuck apart from a real network
+// black hole (compare against the backend's own view, driven by its WS
+// heartbeat).
+bool wsIsConnected();
+
 // Forces the WS connection to drop and reconnect immediately - call when
 // the active transport (WiFi/Ethernet) changes, so the client picks up
 // the new transport right away instead of waiting out its own dead-

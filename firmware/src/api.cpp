@@ -110,3 +110,13 @@ ApiResult apiPressClockButton() {
   serializeJson(doc, body);
   return post("/platforms/" + g_platformId + "/clock", body);
 }
+
+void apiReportDiagnostics(uint32_t freeHeap, unsigned long uptimeMs, bool wsConnectedLocally) {
+  JsonDocument doc;
+  doc["freeHeap"] = freeHeap;
+  doc["uptimeMs"] = uptimeMs;
+  doc["wsConnectedLocally"] = wsConnectedLocally;
+  String body;
+  serializeJson(doc, body);
+  post("/remotes/" + g_remoteId + "/diagnostics", body);
+}

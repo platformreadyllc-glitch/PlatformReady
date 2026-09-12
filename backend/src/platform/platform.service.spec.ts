@@ -257,6 +257,32 @@ describe('PlatformService ESP32 WS integration', () => {
     expect(gw.emitPlatformUpdate).not.toHaveBeenCalled();
   });
 
+  it('reportDiagnostics merges fields into the remote metadata', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw, makeLc());
+    svc.ensurePlatform({ platformId: 'p1' });
+
+    svc.reportDiagnostics('kb-left', {
+      freeHeap: 123456,
+      uptimeMs: 9000,
+      wsConnectedLocally: true,
+    });
+
+    const metadata = svc.findRemote('kb-left')?.metadata;
+    expect(metadata).toMatchObject({
+      freeHeap: 123456,
+      uptimeMs: 9000,
+      wsConnectedLocally: true,
+    });
+    expect(typeof metadata?.reportedAt).toBe('string');
+  });
+
+  it('reportDiagnostics on an unknown remote is a no-op', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw, makeLc());
+    expect(() => svc.reportDiagnostics('nope', { freeHeap: 1 })).not.toThrow();
+  });
+
   it('markRemoteConnected pushes the platform snapshot to the joining remote', () => {
     const gw = makeGateway();
     const esp = makeEspGateway();

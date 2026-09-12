@@ -39,6 +39,8 @@ static unsigned long lastEthRecheckMs = 0;
 // use Ethernet at all. 200ms is still far finer-grained than the ~1s/~5s
 // thresholds transportDecide() itself cares about.
 static unsigned long lastTransportCheckMs = 0;
+// Temporary - see api.h's apiReportDiagnostics() comment.
+static unsigned long lastDiagnosticsReportMs = 0;
 static unsigned long lastScoreboardTick = 0;
 static unsigned long lastStatusChangeMs = 0;
 // How long a transient status word (WHITE, ERR, CLOCK, ...) stays on
@@ -353,6 +355,16 @@ void loop() {
   if (!cfg.platformId.isEmpty() && millis() - lastScoreboardTick > 250) {
     lastScoreboardTick = millis();
     refreshDisplay();
+  }
+
+  // ── Temporary diagnostics (see api.h's apiReportDiagnostics()) ──────────
+  // Deliberately independent of WS connection state - REST keeps working
+  // even during the WS-over-Ethernet stuck-disconnected bug this exists to
+  // chase, so this is what makes it observable throughout a stuck period
+  // rather than only at the last successful WS connect.
+  if (millis() - lastDiagnosticsReportMs > 15000) {
+    lastDiagnosticsReportMs = millis();
+    apiReportDiagnostics(ESP.getFreeHeap(), millis(), wsIsConnected());
   }
 
   // ── Live assignment updates ─────────────────────────────────────────────
