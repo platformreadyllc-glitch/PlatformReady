@@ -126,7 +126,17 @@ bool networkFallbackToWiFi() {
 // the association attempt and returns immediately; the actual connection
 // is observed later via networkConnected()/WiFi.status(), same as the
 // existing WiFi.reconnect() backstop in main.cpp's loop().
+//
+// Skips the call entirely if WiFi is already connected - it's left
+// associated-but-idle (never disconnected) while running on Ethernet, so
+// on a typical Ethernet-loss it's already sitting there ready to go.
+// WiFi.begin() unconditionally tears down and restarts any existing
+// association before reconnecting, so calling it blindly here was forcing
+// a full, needless reassociation (many seconds, sometimes tens of
+// seconds) on every single fallback instead of an instant handoff -
+// confirmed as the cause of a real ~1 minute recovery time on hardware.
 bool networkAssociateWiFiNonInteractive() {
+  if (WiFi.status() == WL_CONNECTED) return true;
   WiFi.begin();
   return true;
 }
