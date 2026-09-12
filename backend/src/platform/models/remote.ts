@@ -15,6 +15,12 @@ export interface RemoteSerialized {
   connected: boolean;
   transport: Transport;
   batteryLevel: number | null;
+  // Raw divider-read voltage as of the last WS (re)connect, reported by
+  // firmware for diagnostics - see ws-client.cpp's wsUrl(). Distinct from
+  // batteryLevel (a 0-100 percent, currently never set by any firmware -
+  // this is volts, e.g. 3.85), and only as fresh as the last reconnect,
+  // not a live feed.
+  batteryVoltage: number | null;
   lastButtonPressed: Button | null;
   displayText: string;
   metadata: Record<string, unknown>;
@@ -30,6 +36,7 @@ export class Remote {
   connected: boolean = false;
   transport: Transport = null;
   batteryLevel: number | null = null;
+  batteryVoltage: number | null = null;
   lastButtonPressed: Button | null = null;
   displayText: string = '';
   metadata: Record<string, unknown>;
@@ -75,14 +82,21 @@ export class Remote {
     this.lastButtonPressed = buttonName;
   }
 
-  connect(transport: Transport = null): void {
+  connect(
+    transport: Transport = null,
+    batteryVoltage: number | null = null,
+  ): void {
     this.connected = true;
     this.transport = transport;
+    this.batteryVoltage = batteryVoltage;
   }
 
   disconnect(): void {
     this.connected = false;
     this.transport = null;
+    // batteryVoltage deliberately left as-is - it's a useful last-known
+    // reading even once disconnected, unlike transport (meaningless once
+    // there's no active connection to have one).
   }
 
   setBatteryLevel(percent: number): void {
@@ -113,6 +127,7 @@ export class Remote {
       connected: this.connected,
       transport: this.transport,
       batteryLevel: this.batteryLevel,
+      batteryVoltage: this.batteryVoltage,
       lastButtonPressed: this.lastButtonPressed,
       displayText: this.displayText,
       metadata: this.metadata,

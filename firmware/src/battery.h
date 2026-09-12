@@ -11,3 +11,10 @@
 void batteryInit();
 void batteryLoop();
 BatteryLevel batteryGetLevel();
+
+// The raw smoothed voltage behind batteryGetLevel()'s classification -
+// exposed for remote diagnostics (reported to the backend, see
+// ws_client.cpp) since there's no serial/USB access to these units to
+// check it directly. Same "optimistic until first sample" caveat as
+// batteryGetLevel() for the brief pre-first-sample window.
+float batteryGetVoltage();

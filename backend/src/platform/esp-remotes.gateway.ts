@@ -21,6 +21,12 @@ function parseTransport(raw: string | null): Transport {
   return raw === 'wifi' || raw === 'ethernet' ? raw : null;
 }
 
+function parseBatteryVoltage(raw: string | null): number | null {
+  if (raw === null) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
 // How often each connection is pinged, and therefore roughly how long a
 // power-cycled remote's connected status takes to flip back to false (worst
 // case: just under two intervals, since a ping sent right before power loss
@@ -75,6 +81,9 @@ export class EspRemotesGateway
       const url = new URL(req.url ?? '', 'http://esp32-ws.local');
       const remoteId = url.searchParams.get('remoteId');
       const transport = parseTransport(url.searchParams.get('transport'));
+      const batteryVoltage = parseBatteryVoltage(
+        url.searchParams.get('batteryVoltage'),
+      );
 
       if (!remoteId || !this.platformService.findRemote(remoteId)) {
         ws.close(4000, 'unknown remote');
@@ -89,7 +98,11 @@ export class EspRemotesGateway
       if (superseded && superseded !== ws) superseded.terminate();
 
       this.connections.set(remoteId, ws);
-      this.platformService.markRemoteConnected(remoteId, transport);
+      this.platformService.markRemoteConnected(
+        remoteId,
+        transport,
+        batteryVoltage,
+      );
 
       ws.isAlive = true;
       ws.on('pong', () => {

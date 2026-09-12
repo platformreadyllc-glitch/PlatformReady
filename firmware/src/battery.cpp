@@ -67,3 +67,7 @@ BatteryLevel batteryGetLevel() {
   if (!g_haveReading) return BatteryLevel::BATT_FULL;
   return batteryLevelFromVoltage(g_smoothedVoltage);
 }
+
+float batteryGetVoltage() {
+  return g_smoothedVoltage;
+}

@@ -238,6 +238,18 @@ describe('PlatformService ESP32 WS integration', () => {
     expect(svc.findRemote('kb-left')?.transport).toBe(null);
   });
 
+  it('markRemoteConnected records the reported battery voltage; disconnect leaves it as the last known reading', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw, makeLc());
+    svc.ensurePlatform({ platformId: 'p1' });
+
+    svc.markRemoteConnected('kb-left', 'wifi', 3.85);
+    expect(svc.findRemote('kb-left')?.batteryVoltage).toBe(3.85);
+
+    svc.markRemoteDisconnected('kb-left');
+    expect(svc.findRemote('kb-left')?.batteryVoltage).toBe(3.85);
+  });
+
   it('markRemoteConnected on an unknown remote is a no-op', () => {
     const gw = makeGateway();
     const svc = new PlatformService(gw, makeLc());

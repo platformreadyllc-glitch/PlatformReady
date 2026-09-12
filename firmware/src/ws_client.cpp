@@ -1,6 +1,7 @@
 #include "ws_client.h"
 #include "scoreboard.h"
 #include "api.h"
+#include "battery.h"
 #include <WebSocketsClient.h>
 #include <ArduinoJson.h>
 #include <string.h>
@@ -17,9 +18,17 @@ static bool g_started = false;
 // transport switch, not just at initial connect).
 static String g_remoteId;
 
+// batteryVoltage is a one-shot diagnostic snapshot as of connect time, not
+// a live telemetry feed - there's no serial/USB access to these units to
+// check readings directly otherwise, and reconnects (transport switches,
+// drops) happen often enough for this to stay reasonably fresh without
+// needing its own separate reporting channel. Remove once a real
+// fuel-gauge chip replaces the current lookup-table approach and this
+// stops being a "does this even read sensibly" question.
 static String wsUrl(const String& remoteId, bool isEthernet) {
   return "/esp32-ws?remoteId=" + remoteId +
-         "&transport=" + (isEthernet ? "ethernet" : "wifi");
+         "&transport=" + (isEthernet ? "ethernet" : "wifi") +
+         "&batteryVoltage=" + String(batteryGetVoltage(), 2);
 }
 
 struct PendingAssignment {

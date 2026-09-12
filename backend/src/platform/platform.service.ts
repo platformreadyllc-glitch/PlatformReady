@@ -53,10 +53,14 @@ export class PlatformService {
     return this.manager.findRemote(remoteId);
   }
 
-  markRemoteConnected(remoteId: string, transport: Transport = null): void {
+  markRemoteConnected(
+    remoteId: string,
+    transport: Transport = null,
+    batteryVoltage: number | null = null,
+  ): void {
     const remote = this.manager.findRemote(remoteId);
     if (!remote) return;
-    remote.connect(transport);
+    remote.connect(transport, batteryVoltage);
     this.emitIfActive(remote, true);
   }
 
