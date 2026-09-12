@@ -33,7 +33,7 @@ static void generateMac() {
   g_mac[5] = (chipId >> 40) & 0xFF;
 }
 
-bool networkTryEthernet() {
+bool networkTryEthernet(unsigned long dhcpTimeoutMs) {
 #ifdef SKIP_ETHERNET
   return false;
 #else
@@ -53,12 +53,26 @@ bool networkTryEthernet() {
 
     SPI.begin();  // uses ESP32 VSPI defaults: SCLK=18, MISO=19, MOSI=23
     Ethernet.init(ETH_CS);
+    // Ethernet.init() only records which pin is chip-select
+    // (W5100Class::setSS()) - it does NOT actually probe/reset the W5x00
+    // chip over SPI. That real init (chip-type detection, buffer setup)
+    // only otherwise happens inside EthernetClass::begin(), via
+    // W5100.init() - too late for us: W5100Class::getLinkStatus() reads
+    // UNKNOWN (not LinkOFF), not the real PHY register, until
+    // W5100Class::init() has run at least once. Without this, the
+    // linkStatus() check right below always failed - cable or no cable -
+    // and Ethernet.begin() (the only thing that would have actually set
+    // it up) was never reached to fix that for next time either.
+    // W5100.init() is idempotent (a no-op if already initialized, per its
+    // own source) - Ethernet.begin() below will just find it already
+    // done.
+    W5100.init();
     alreadyInitialized = true;
   }
 
   if (Ethernet.linkStatus() != LinkON) return false;
 
-  if (Ethernet.begin(g_mac, 10000) != 1) return false;
+  if (Ethernet.begin(g_mac, dhcpTimeoutMs) != 1) return false;
 
   g_ethernet = true;
   return true;

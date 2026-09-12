@@ -231,7 +231,14 @@ void loop() {
       // than torn down (no WiFi.disconnect()) - avoids flicker if the
       // cable turns out to be marginal, and matches the boot-time
       // decision to never proactively manage WiFi off.
-      if (networkTryEthernet()) {
+      //
+      // Shorter DHCP timeout than the boot call (2s vs 10s) - this can
+      // recur every ~5s (transportDecide()'s recheck interval) while a
+      // cable is present but DHCP isn't succeeding, and a full 10s block
+      // of loop() on every retry would stall button reads and the WS
+      // heartbeat for far too long to repeat that often. A failed 2s
+      // attempt just gets retried on the next recheck anyway.
+      if (networkTryEthernet(2000)) {
         wsNotifyTransportChanged(networkIsEthernet());
       }
       break;

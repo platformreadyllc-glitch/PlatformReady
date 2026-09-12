@@ -5,7 +5,13 @@
 // Tries Ethernet first (if W5500 cable is present); falls back to WiFi.
 // Returns false only if Ethernet DHCP failed with a cable present.
 // For WiFi, always returns true (WiFiManager blocks until connected or portal is dismissed).
-bool networkTryEthernet();
+// dhcpTimeoutMs bounds the blocking Ethernet.begin() DHCP negotiation -
+// defaults to a patient 10s for the one-time boot call; the runtime
+// reclaim path (main.cpp's loop()) passes a shorter value instead, since
+// blocking the whole loop() for up to 10s on every periodic retry would
+// be a real responsiveness regression (missed button presses, stalled WS
+// heartbeat) if DHCP happens to be unavailable on that link.
+bool networkTryEthernet(unsigned long dhcpTimeoutMs = 10000);
 
 // Raw Ethernet.linkStatus() read, independent of which transport is
 // currently active - safe to call any time after the first
