@@ -48,7 +48,29 @@ WebSocketsNetworkClient::WebSocketsNetworkClient(WiFiClient wifi_client)
   (void)wifi_client;
 }
 
-WebSocketsNetworkClient::~WebSocketsNetworkClient() {}
+// WebSocketsClient.cpp's own cleanup (WebSocketsClient::clientDisconnect())
+// only calls stop() on the wrapper if tcp->connected() is still true at
+// that moment - but the most common reason to be cleaning up at all is
+// that the connection was *just* detected as lost, meaning connected()
+// already reads false and stop() gets skipped entirely. Its OWN reconnect
+// loop (WebSocketsClient::loop()) is worse: it directly `delete`s the old
+// wrapper with no stop() call at all, unconditionally. Either way, the
+// long-lived EthernetClient/WiFiClient this wrapper was pinned to (see
+// network.h's accessors) never gets properly closed - its hardware socket
+// (the W5500 only has a handful, shared with REST/OTA too) stays stuck,
+// and every subsequent reconnect attempt fails to acquire a socket at all
+// once they're all stuck this way. Confirmed as the real cause of "WS
+// connects once over Ethernet, then never reconnects again."
+//
+// Fixed here rather than in the library: C++ runs this destructor on
+// every deletion path (both of the library's above), so calling stop()
+// unconditionally here guarantees real cleanup regardless of which path
+// triggered it. EthernetClient::stop()/WiFiClient::stop() are both
+// idempotent - a no-op if already stopped - so this is safe to call even
+// when the library *did* already clean up properly.
+WebSocketsNetworkClient::~WebSocketsNetworkClient() {
+  if (_impl->active) _impl->active->stop();
+}
 
 int WebSocketsNetworkClient::connect(IPAddress ip, uint16_t port) {
   _impl->activeIsEthernet = networkIsEthernet();

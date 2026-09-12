@@ -190,12 +190,20 @@ static WiFiClient     g_wifiWsClient;
 // 3-arg overload at all, and while WiFiClient does, it's not reachable
 // through a plain Client* the way ws_network_client.cpp holds these. Both
 // transports' connect timeouts are pre-configured once here instead
-// (where the concrete types are in scope), approximating the WS library's
-// own WEBSOCKETS_TCP_TIMEOUT (5000ms, WebSockets.h).
+// (where the concrete types are in scope).
+//
+// 2000ms rather than exactly matching the WS library's own
+// WEBSOCKETS_TCP_TIMEOUT (5000ms, WebSockets.h) - this same value also
+// bounds how long WebSocketsNetworkClient's destructor can block on
+// stop() (see its own comment: it now always calls stop() on cleanup, to
+// work around the library's own inconsistent handling), which runs
+// synchronously inside loop(). A shorter, still-reasonable connect
+// timeout keeps that worst case tighter without meaningfully hurting
+// real connection attempts on a local network.
 Client* networkEthernetWsClient() {
   static bool configured = false;
   if (!configured) {
-    g_ethWsClient.setConnectionTimeout(5000);
+    g_ethWsClient.setConnectionTimeout(2000);
     configured = true;
   }
   return &g_ethWsClient;
@@ -204,7 +212,7 @@ Client* networkEthernetWsClient() {
 Client* networkWiFiWsClient() {
   static bool configured = false;
   if (!configured) {
-    g_wifiWsClient.setTimeout(5);  // seconds - matches the 5000ms above
+    g_wifiWsClient.setTimeout(2);  // seconds - matches the 2000ms above
     configured = true;
   }
   return &g_wifiWsClient;
