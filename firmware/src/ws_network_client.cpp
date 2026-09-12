@@ -31,6 +31,9 @@ struct WebSocketsNetworkClient::Impl {
   // a transport flip mid-session can't split one connection's calls across
   // two different sockets (see network.h's accessor comments).
   Client* active = nullptr;
+  // Captured alongside `active` at connect() time - see write()'s comment
+  // below for why this needs to be known there.
+  bool activeIsEthernet = false;
 };
 
 WebSocketsNetworkClient::WebSocketsNetworkClient() : _impl(new Impl()) {}
@@ -48,12 +51,14 @@ WebSocketsNetworkClient::WebSocketsNetworkClient(WiFiClient wifi_client)
 WebSocketsNetworkClient::~WebSocketsNetworkClient() {}
 
 int WebSocketsNetworkClient::connect(IPAddress ip, uint16_t port) {
-  _impl->active = networkIsEthernet() ? networkEthernetWsClient() : networkWiFiWsClient();
+  _impl->activeIsEthernet = networkIsEthernet();
+  _impl->active = _impl->activeIsEthernet ? networkEthernetWsClient() : networkWiFiWsClient();
   return _impl->active->connect(ip, port);
 }
 
 int WebSocketsNetworkClient::connect(const char* host, uint16_t port) {
-  _impl->active = networkIsEthernet() ? networkEthernetWsClient() : networkWiFiWsClient();
+  _impl->activeIsEthernet = networkIsEthernet();
+  _impl->active = _impl->activeIsEthernet ? networkEthernetWsClient() : networkWiFiWsClient();
   return _impl->active->connect(host, port);
 }
 
@@ -63,21 +68,41 @@ int WebSocketsNetworkClient::connect(const char* host, uint16_t port, int32_t ti
   // transports' connect timeouts are pre-configured once in network.cpp's
   // accessors instead (see their comments), so timeout_ms is unused here.
   (void)timeout_ms;
-  _impl->active = networkIsEthernet() ? networkEthernetWsClient() : networkWiFiWsClient();
+  _impl->activeIsEthernet = networkIsEthernet();
+  _impl->active = _impl->activeIsEthernet ? networkEthernetWsClient() : networkWiFiWsClient();
   return _impl->active->connect(host, port);
 }
 
+// khoih-prog/Ethernet_Generic's EthernetClient::write(const uint8_t*, size_t)
+// has a confirmed bug (EthernetClient_Impl.h): it internally retries until
+// the data is actually sent (or a real socket error occurs), but then
+// *unconditionally* returns 0 afterward regardless of which happened - the
+// successfully-sent byte count it computes internally is never returned.
+// WebSockets.cpp's frame-writing code (WebSockets::sendFrame()/
+// sendFrameHeader()) checks this return value against the requested size
+// and treats a mismatch as a failed send, which - since the bytes usually
+// did go out correctly - desyncs its view of the connection from what the
+// backend actually received, corrupting the frame stream (surfaced as the
+// backend's `ws` package rejecting frames with "Invalid WebSocket frame:
+// RSV1 must be clear" and crashing). WiFiClient::write() reports correctly,
+// so this override only needs to compensate for the Ethernet path.
 size_t WebSocketsNetworkClient::write(uint8_t data) {
-  return _impl->active ? _impl->active->write(data) : 0;
+  if (!_impl->active) return 0;
+  size_t written = _impl->active->write(data);
+  return _impl->activeIsEthernet ? 1 : written;
 }
 
 size_t WebSocketsNetworkClient::write(const uint8_t* buf, size_t size) {
-  return _impl->active ? _impl->active->write(buf, size) : 0;
+  if (!_impl->active) return 0;
+  size_t written = _impl->active->write(buf, size);
+  return _impl->activeIsEthernet ? size : written;
 }
 
 size_t WebSocketsNetworkClient::write(const char* str) {
   if (!_impl->active) return 0;
-  return _impl->active->write(reinterpret_cast<const uint8_t*>(str), strlen(str));
+  size_t len = strlen(str);
+  size_t written = _impl->active->write(reinterpret_cast<const uint8_t*>(str), len);
+  return _impl->activeIsEthernet ? len : written;
 }
 
 int WebSocketsNetworkClient::available() {

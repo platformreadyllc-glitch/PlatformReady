@@ -29,6 +29,15 @@ static bool wasDisconnected = false;
 static bool ethLastLinkUp = false;
 static unsigned long ethLinkStableSinceMs = 0;
 static unsigned long lastEthRecheckMs = 0;
+// Rate-gates the check itself (below), separate from transportDecide()'s
+// own internal debounce/recheck timers above - networkEthernetLinkPresent()
+// is a real SPI transaction to the W5500 (not free), and loop() otherwise
+// spins as fast as the CPU allows, so calling it unconditionally on every
+// single iteration was measurably adding latency to everything else in
+// loop() (button reads, WS heartbeat) even on WiFi-only units that never
+// use Ethernet at all. 200ms is still far finer-grained than the ~1s/~5s
+// thresholds transportDecide() itself cares about.
+static unsigned long lastTransportCheckMs = 0;
 static unsigned long lastScoreboardTick = 0;
 static unsigned long lastStatusChangeMs = 0;
 // How long a transient status word (WHITE, ERR, CLOCK, ...) stays on
@@ -210,40 +219,43 @@ void loop() {
   wsLoop();
 
   // ── Runtime Ethernet<->WiFi transport fallback ──────────────────────────
-  // Every iteration, independent of the networkConnected() gate below - a
-  // cable pull needs to be caught immediately (not just once "No network"
-  // has already kicked in), and a replug needs to be noticed even while
-  // sitting in that branch's own delay(2000) loop.
-  bool ethLinkUp = networkEthernetLinkPresent();
-  switch (transportDecide(networkIsEthernet(), ethLinkUp, ethLastLinkUp,
-                          ethLinkStableSinceMs, lastEthRecheckMs, millis())) {
-    case TransportAction::SWITCH_TO_WIFI:
-      Serial.println("[loop] Ethernet lost - falling back to WiFi");
-      networkFallbackToWiFi();
-      networkBeginWiFi();
-      networkAssociateWiFiNonInteractive();
-      wsNotifyTransportChanged(networkIsEthernet());
-      displayShowError("Eth lost, WiFi...");
-      break;
-    case TransportAction::SWITCH_TO_ETHERNET:
-      Serial.println("[loop] Ethernet link back - reclaiming from WiFi");
-      // WiFi is deliberately left associated-but-idle on success rather
-      // than torn down (no WiFi.disconnect()) - avoids flicker if the
-      // cable turns out to be marginal, and matches the boot-time
-      // decision to never proactively manage WiFi off.
-      //
-      // Shorter DHCP timeout than the boot call (2s vs 10s) - this can
-      // recur every ~5s (transportDecide()'s recheck interval) while a
-      // cable is present but DHCP isn't succeeding, and a full 10s block
-      // of loop() on every retry would stall button reads and the WS
-      // heartbeat for far too long to repeat that often. A failed 2s
-      // attempt just gets retried on the next recheck anyway.
-      if (networkTryEthernet(2000)) {
+  // Rate-gated (below), independent of the networkConnected() gate further
+  // down - a cable pull needs to be caught promptly (not just once "No
+  // network" has already kicked in), and a replug needs to be noticed even
+  // while sitting in that branch's own delay(2000) loop.
+  if (millis() - lastTransportCheckMs >= 200) {
+    lastTransportCheckMs = millis();
+    bool ethLinkUp = networkEthernetLinkPresent();
+    switch (transportDecide(networkIsEthernet(), ethLinkUp, ethLastLinkUp,
+                            ethLinkStableSinceMs, lastEthRecheckMs, millis())) {
+      case TransportAction::SWITCH_TO_WIFI:
+        Serial.println("[loop] Ethernet lost - falling back to WiFi");
+        networkFallbackToWiFi();
+        networkBeginWiFi();
+        networkAssociateWiFiNonInteractive();
         wsNotifyTransportChanged(networkIsEthernet());
-      }
-      break;
-    case TransportAction::STAY:
-      break;
+        displayShowError("Eth lost, WiFi...");
+        break;
+      case TransportAction::SWITCH_TO_ETHERNET:
+        Serial.println("[loop] Ethernet link back - reclaiming from WiFi");
+        // WiFi is deliberately left associated-but-idle on success rather
+        // than torn down (no WiFi.disconnect()) - avoids flicker if the
+        // cable turns out to be marginal, and matches the boot-time
+        // decision to never proactively manage WiFi off.
+        //
+        // Shorter DHCP timeout than the boot call (2s vs 10s) - this can
+        // recur every ~5s (transportDecide()'s recheck interval) while a
+        // cable is present but DHCP isn't succeeding, and a full 10s block
+        // of loop() on every retry would stall button reads and the WS
+        // heartbeat for far too long to repeat that often. A failed 2s
+        // attempt just gets retried on the next recheck anyway.
+        if (networkTryEthernet(2000)) {
+          wsNotifyTransportChanged(networkIsEthernet());
+        }
+        break;
+      case TransportAction::STAY:
+        break;
+    }
   }
 
   if (!networkConnected()) {
