@@ -120,3 +120,12 @@ void apiReportDiagnostics(uint32_t freeHeap, unsigned long uptimeMs, bool wsConn
   serializeJson(doc, body);
   post("/remotes/" + g_remoteId + "/diagnostics", body);
 }
+
+void apiReportEvent(const String& tag, const String& detail) {
+  JsonDocument doc;
+  doc["tag"] = tag;
+  doc["detail"] = detail;
+  String body;
+  serializeJson(doc, body);
+  post("/remotes/" + g_remoteId + "/event", body);
+}

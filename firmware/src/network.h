@@ -64,3 +64,10 @@ Client* networkNewClient();
 // different sockets.
 Client* networkEthernetWsClient();
 Client* networkWiFiWsClient();
+
+// TEMPORARY - see network.cpp's definition. Raw W5500 socket-status
+// register for the dedicated WS socket above, decoded to a human-readable
+// string (e.g. "ESTABLISHED", "CLOSE_WAIT"). Remove alongside the rest of
+// this instrumentation once the root cause of the Ethernet WS instability
+// is found.
+String networkEthernetWsSocketState();

@@ -45,3 +45,15 @@ ApiResult apiPressClockButton();
 // connect. Fire-and-forget: result isn't checked by callers. Remove once
 // that bug is confirmed fixed and this stops earning its keep.
 void apiReportDiagnostics(uint32_t freeHeap, unsigned long uptimeMs, bool wsConnectedLocally);
+
+// TEMPORARY - instrumentation for the "Ethernet WS drops, and reconnecting
+// afterward sometimes silently fails for 30+s before one attempt lands"
+// investigation. Unlike apiReportDiagnostics() above (a periodic snapshot),
+// this is a one-shot event report - called directly from
+// ws_network_client.cpp around every raw connect()/teardown attempt on the
+// WS socket, success or failure, so the backend log can see attempts that
+// never make it to a real WS handshake (invisible to the backend
+// otherwise). Same REST channel, same fire-and-forget contract as
+// apiReportDiagnostics(). Remove alongside the rest of this instrumentation
+// once the root cause is found.
+void apiReportEvent(const String& tag, const String& detail);

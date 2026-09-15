@@ -258,6 +258,40 @@ Client* networkWiFiWsClient() {
   return &g_wifiWsClient;
 }
 
+// TEMPORARY - instrumentation for the "Ethernet WS connection dies, and
+// reconnecting afterward sometimes silently fails for 30+s before one
+// attempt lands" investigation (see ws_network_client.cpp, which reports
+// this alongside every connect attempt). EthernetClient::status() reads
+// the W5500's raw per-socket status register directly - independent of
+// this project's own transport bookkeeping - so it tells us what the chip
+// itself thinks is going on with this specific socket (still ESTABLISHED
+// and just not getting acked? sitting in CLOSE_WAIT/TIME_WAIT/FIN_WAIT,
+// meaning the previous teardown didn't actually finish? plain CLOSED and
+// available?) instead of us only inferring it from symptoms. Safe to call
+// regardless of current transport/connection state - EthernetClient::
+// status() itself handles an unassigned socket (returns SnSR::CLOSED).
+// Remove alongside the rest of this instrumentation once the root cause
+// is found.
+String networkEthernetWsSocketState() {
+#ifdef SKIP_ETHERNET
+  return "n/a";
+#else
+  switch (g_ethWsClient.status()) {
+    case SnSR::CLOSED:      return "CLOSED";
+    case SnSR::LISTEN:      return "LISTEN";
+    case SnSR::SYNSENT:     return "SYNSENT";
+    case SnSR::SYNRECV:     return "SYNRECV";
+    case SnSR::ESTABLISHED: return "ESTABLISHED";
+    case SnSR::FIN_WAIT:    return "FIN_WAIT";
+    case SnSR::CLOSING:     return "CLOSING";
+    case SnSR::TIME_WAIT:   return "TIME_WAIT";
+    case SnSR::CLOSE_WAIT:  return "CLOSE_WAIT";
+    case SnSR::LAST_ACK:    return "LAST_ACK";
+    default:                return "unknown(0x" + String(g_ethWsClient.status(), HEX) + ")";
+  }
+#endif
+}
+
 // ── Ethernet config web server (webConfigRunEthernet) ─────────────────────────
 // Declared in webconfig.h, implemented here so Ethernet_Generic.h is only
 // included in this one translation unit.

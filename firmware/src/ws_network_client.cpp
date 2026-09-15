@@ -22,7 +22,31 @@
 
 #include <WebSocketsNetworkClient.h>
 #include "network.h"
+#include "api.h"
+#include "haptic.h"
 #include <string.h>
+
+// TEMPORARY - instrumentation for the "Ethernet WS drops, and reconnecting
+// afterward sometimes silently fails for 30+s before one attempt lands"
+// investigation. Every connect() overload below and the destructor's
+// teardown report here - this is the only place a *failed* connect
+// attempt is visible at all (the WebSockets library itself never surfaces
+// one to the app-level event callback in ws_client.cpp, success or
+// failure - only a fully-completed handshake or a later disconnect ever
+// reaches wsEvent()). Reported over the separate REST channel (api.cpp),
+// which keeps working even while this WS socket itself is wedged - same
+// reasoning as apiReportDiagnostics(). Remove alongside the rest of this
+// instrumentation once the root cause is found.
+static void reportWsEvent(const char* tag, int result, bool isEthernet) {
+  String detail = "result=" + String(result);
+  if (isEthernet) {
+    detail += " sockState=" + networkEthernetWsSocketState();
+  }
+  unsigned long lastHaptic = hapticLastFiredMs();
+  detail += lastHaptic == 0 ? " msSinceHaptic=never"
+                            : " msSinceHaptic=" + String(millis() - lastHaptic);
+  apiReportEvent(tag, detail);
+}
 
 struct WebSocketsNetworkClient::Impl {
   // Which underlying Client this specific TCP session is pinned to, chosen
@@ -69,19 +93,33 @@ WebSocketsNetworkClient::WebSocketsNetworkClient(WiFiClient wifi_client)
 // idempotent - a no-op if already stopped - so this is safe to call even
 // when the library *did* already clean up properly.
 WebSocketsNetworkClient::~WebSocketsNetworkClient() {
-  if (_impl->active) _impl->active->stop();
+  if (!_impl->active) return;
+  // Captured before stop() - see reportWsEvent()'s "sockState" detail: this
+  // tells us whether the socket was already CLOSED (clean) or still
+  // ESTABLISHED/CLOSE_WAIT/etc. (meaning stop() below has to do real work,
+  // possibly its own up-to-_timeout wait) at the moment we tore down.
+  bool isEthernet = _impl->activeIsEthernet;
+  String before = isEthernet ? networkEthernetWsSocketState() : "n/a";
+  _impl->active->stop();
+  String detail = "before=" + before;
+  if (isEthernet) detail += " after=" + networkEthernetWsSocketState();
+  apiReportEvent("ws_teardown", detail);
 }
 
 int WebSocketsNetworkClient::connect(IPAddress ip, uint16_t port) {
   _impl->activeIsEthernet = networkIsEthernet();
   _impl->active = _impl->activeIsEthernet ? networkEthernetWsClient() : networkWiFiWsClient();
-  return _impl->active->connect(ip, port);
+  int result = _impl->active->connect(ip, port);
+  reportWsEvent("ws_connect_ip", result, _impl->activeIsEthernet);
+  return result;
 }
 
 int WebSocketsNetworkClient::connect(const char* host, uint16_t port) {
   _impl->activeIsEthernet = networkIsEthernet();
   _impl->active = _impl->activeIsEthernet ? networkEthernetWsClient() : networkWiFiWsClient();
-  return _impl->active->connect(host, port);
+  int result = _impl->active->connect(host, port);
+  reportWsEvent("ws_connect_host", result, _impl->activeIsEthernet);
+  return result;
 }
 
 int WebSocketsNetworkClient::connect(const char* host, uint16_t port, int32_t timeout_ms) {
@@ -92,7 +130,12 @@ int WebSocketsNetworkClient::connect(const char* host, uint16_t port, int32_t ti
   (void)timeout_ms;
   _impl->activeIsEthernet = networkIsEthernet();
   _impl->active = _impl->activeIsEthernet ? networkEthernetWsClient() : networkWiFiWsClient();
-  return _impl->active->connect(host, port);
+  int result = _impl->active->connect(host, port);
+  // This is the overload WebSocketsClient.cpp actually calls on ESP32 (see
+  // network.h's accessor comments) - the other two exist only to satisfy
+  // the base class's declared API surface.
+  reportWsEvent("ws_connect", result, _impl->activeIsEthernet);
+  return result;
 }
 
 // khoih-prog/Ethernet_Generic's EthernetClient::write(const uint8_t*, size_t)
