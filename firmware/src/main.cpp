@@ -225,6 +225,9 @@ void loop() {
   // Samples on its own ~2s schedule internally - cheap to call every
   // iteration, same pattern as wsLoop() above.
   batteryLoop();
+  // Renews the Ethernet DHCP lease when due - internally self-rate-limited
+  // (see network.h), safe to call every iteration regardless of transport.
+  networkMaintainEthernet();
 
   // ── Runtime Ethernet<->WiFi transport fallback ──────────────────────────
   // Rate-gated (below), independent of the networkConnected() gate further

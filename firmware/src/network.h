@@ -13,6 +13,13 @@
 // heartbeat) if DHCP happens to be unavailable on that link.
 bool networkTryEthernet(unsigned long dhcpTimeoutMs = 10000);
 
+// Renews the DHCP lease if one is due - call unconditionally, every
+// loop() tick, regardless of which transport is currently active. Cheap:
+// a no-op millis() check unless a renew/rebind is actually due, same as
+// networkEthernetLinkPresent() below. A no-op entirely when built with
+// -DSKIP_ETHERNET.
+void networkMaintainEthernet();
+
 // Raw Ethernet.linkStatus() read, independent of which transport is
 // currently active - safe to call any time after the first
 // networkTryEthernet() call, including while running on WiFi (e.g. to

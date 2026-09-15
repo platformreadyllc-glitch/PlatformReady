@@ -67,6 +67,24 @@ bool networkTryEthernet(unsigned long dhcpTimeoutMs) {
     // own source) - Ethernet.begin() below will just find it already
     // done.
     W5100.init();
+
+    // The W5500's TCP is implemented in hardware with its own
+    // retry/timeout logic, entirely separate from - and far less patient
+    // than - a normal software stack like the WiFi path's lwIP. Left at
+    // the chip's power-on defaults (RTR=0x07D0 -> 200ms per retry, RCR=8
+    // retries), it gives up and unilaterally kills a socket after only
+    // ~1.6s of an unacked segment, with nothing above the TCP layer able
+    // to see it coming - confirmed live as the actual cause of Ethernet
+    // WS connections dying (raw TCP resets, WStype_DISCONNECTED with no
+    // preceding link-loss) every ~20-60s on a LAN that's perfectly stable
+    // over WiFi on the same backend. Widening this to a still-modest ~4s
+    // budget (200ms x 20) gives a real LAN hiccup room to clear without
+    // masking a genuinely dead link for long - well under the ~10s
+    // worst-case the app-level WS heartbeat (ws_client.cpp) already needs
+    // to notice a real failure regardless.
+    W5100.setRetransmissionTime(2000);   // 2000 x 100us = 200ms/retry
+    W5100.setRetransmissionCount(20);    // 200ms x 20 = ~4s total budget
+
     alreadyInitialized = true;
   }
 
@@ -76,6 +94,19 @@ bool networkTryEthernet(unsigned long dhcpTimeoutMs) {
 
   g_ethernet = true;
   return true;
+#endif
+}
+
+// Renews the DHCP lease when it's actually due - never called anywhere
+// before this, meaning a long-lived Ethernet-connected remote would just
+// silently run out its original lease. checkLease() (called inside
+// Ethernet.maintain()) is pure millis() math and a no-op SPI-wise unless a
+// renew/rebind is actually due, same reasoning as networkEthernetLinkPresent()
+// below being cheap to call every loop() tick - safe to call unconditionally,
+// no rate-gating needed on top of the library's own internal timer.
+void networkMaintainEthernet() {
+#ifndef SKIP_ETHERNET
+  Ethernet.maintain();
 #endif
 }
 
@@ -167,6 +198,15 @@ static WiFiClient     g_wifiClient;
 
 Client* networkNewClient() {
   if (g_ethernet) {
+    // Callers (api.cpp) always call stop() on the client they got back
+    // before the next networkNewClient() call, so this is normally a
+    // no-op - but belt-and-suspenders defensively here too: the W5500 only
+    // has a handful of hardware sockets, and silently reassigning over a
+    // still-open one (e.g. from an early-return path that skipped its own
+    // stop()) would strand that socket forever instead of freeing it,
+    // same class of bug as the WS wrapper leak fixed in
+    // ws_network_client.cpp's destructor.
+    g_ethClient.stop();
     g_ethClient = EthernetClient();
     return &g_ethClient;
   }
