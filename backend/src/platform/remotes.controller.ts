@@ -2,6 +2,8 @@ import { Controller, Post, Param, Body } from '@nestjs/common';
 import { PlatformService } from './platform.service';
 import { RegisterPhysicalRemoteDto } from './dto/register-physical-remote.dto';
 import { ReportDiagnosticsDto } from './dto/report-diagnostics.dto';
+import { ReportEventDto } from './dto/report-event.dto';
+import { logConnEvent } from './conn-log';
 
 // Top-level (not platform-scoped) routes for physical remotes that haven't
 // been assigned to a platform yet — registration happens once by remoteId
@@ -22,5 +24,18 @@ export class RemotesController {
     @Body() dto: ReportDiagnosticsDto,
   ) {
     this.platformService.reportDiagnostics(remoteId, dto);
+  }
+
+  // TEMPORARY - see conn-log.ts and ReportEventDto. Not part of
+  // PlatformService/PlatformManager state - this is a pure logging
+  // side-channel for the Ethernet WS instability investigation, so it
+  // writes straight to the shared conn-log file rather than going through
+  // the service layer like the routes above.
+  @Post(':remoteId/event')
+  reportEvent(
+    @Param('remoteId') remoteId: string,
+    @Body() dto: ReportEventDto,
+  ) {
+    logConnEvent(remoteId, `${dto.tag}${dto.detail ? ' ' + dto.detail : ''}`);
   }
 }

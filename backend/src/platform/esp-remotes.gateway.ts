@@ -12,6 +12,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { PlatformService } from './platform.service';
 import { Role, Button, Transport } from './models/enums';
 import { PlatformClockSerialized } from './models/platform-clock';
+import { logConnEvent } from './conn-log';
 
 type LiveSocket = WebSocket & { isAlive?: boolean };
 
@@ -95,7 +96,15 @@ export class EspRemotesGateway
       // reaps it (hours). Terminate it now; its `close` handler no-ops
       // because the map no longer points at it.
       const superseded = this.connections.get(remoteId);
-      if (superseded && superseded !== ws) superseded.terminate();
+      if (superseded && superseded !== ws) {
+        logConnEvent(remoteId, 'superseded (terminating stale socket)');
+        superseded.terminate();
+      }
+
+      logConnEvent(
+        remoteId,
+        `connect transport=${transport ?? 'unknown'} battery=${batteryVoltage ?? 'n/a'}`,
+      );
 
       this.connections.set(remoteId, ws);
       this.platformService.markRemoteConnected(
@@ -118,23 +127,31 @@ export class EspRemotesGateway
       // this one connection. Log and drop just this connection instead.
       ws.on('error', (err) => {
         console.error(`[esp-remotes] WS error for ${remoteId}:`, err);
+        logConnEvent(remoteId, `error ${String(err)}`);
         ws.terminate();
       });
 
-      ws.on('close', () => {
+      ws.on('close', (code?: number, reason?: Buffer) => {
         // Only clear state if this socket is still the one on record - a
         // superseded old socket closing shouldn't stomp on a newer
         // reconnect's state.
         if (this.connections.get(remoteId) === ws) {
+          logConnEvent(
+            remoteId,
+            `close code=${code ?? 'n/a'} reason=${reason?.toString() || 'n/a'} isAlive=${ws.isAlive}`,
+          );
           this.connections.delete(remoteId);
           this.platformService.markRemoteDisconnected(remoteId);
+        } else {
+          logConnEvent(remoteId, `close (superseded socket) code=${code}`);
         }
       });
     });
 
     this.heartbeatTimer = setInterval(() => {
-      for (const ws of this.connections.values()) {
+      for (const [remoteId, ws] of this.connections.entries()) {
         if (ws.isAlive === false) {
+          logConnEvent(remoteId, 'heartbeat: missed pong, terminating');
           ws.terminate();
           continue;
         }
