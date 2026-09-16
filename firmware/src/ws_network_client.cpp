@@ -37,14 +37,18 @@
 // which keeps working even while this WS socket itself is wedged - same
 // reasoning as apiReportDiagnostics(). Remove alongside the rest of this
 // instrumentation once the root cause is found.
+static String hapticDetailSuffix() {
+  unsigned long lastHaptic = hapticLastFiredMs();
+  return lastHaptic == 0 ? " msSinceHaptic=never"
+                         : " msSinceHaptic=" + String(millis() - lastHaptic);
+}
+
 static void reportWsEvent(const char* tag, int result, bool isEthernet) {
   String detail = "result=" + String(result);
   if (isEthernet) {
     detail += " sockState=" + networkEthernetWsSocketState();
   }
-  unsigned long lastHaptic = hapticLastFiredMs();
-  detail += lastHaptic == 0 ? " msSinceHaptic=never"
-                            : " msSinceHaptic=" + String(millis() - lastHaptic);
+  detail += hapticDetailSuffix();
   apiReportEvent(tag, detail);
 }
 
@@ -97,12 +101,19 @@ WebSocketsNetworkClient::~WebSocketsNetworkClient() {
   // Captured before stop() - see reportWsEvent()'s "sockState" detail: this
   // tells us whether the socket was already CLOSED (clean) or still
   // ESTABLISHED/CLOSE_WAIT/etc. (meaning stop() below has to do real work,
-  // possibly its own up-to-_timeout wait) at the moment we tore down.
+  // possibly its own up-to-_timeout wait) at the moment we tore down. This
+  // destructor runs right as the library gives up on the just-dropped
+  // connection - the closest point-in-time this instrumentation has to the
+  // actual drop itself (reportWsEvent() above only fires at the *next*
+  // connect attempt, which can trail the real drop by seconds) - so
+  // msSinceHaptic here is the one that actually matters for correlating a
+  // drop against a recent button press, not just the reconnect that follows.
   bool isEthernet = _impl->activeIsEthernet;
   String before = isEthernet ? networkEthernetWsSocketState() : "n/a";
   _impl->active->stop();
   String detail = "before=" + before;
   if (isEthernet) detail += " after=" + networkEthernetWsSocketState();
+  detail += hapticDetailSuffix();
   apiReportEvent("ws_teardown", detail);
 }
 
