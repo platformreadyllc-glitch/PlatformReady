@@ -412,12 +412,6 @@ void loop() {
   if (cfg.type == RemoteType::CHIEF &&
       buttonRead(Button::CLOCK) == ButtonEvent::PRESSED) {
     lastActivityMs = millis();
-    // TEMPORARY - direct timestamp for the haptic-motor/WS-drop correlation
-    // investigation (see ws_network_client.cpp's msSinceHaptic reporting) -
-    // reported before hapticPulse() below so this timestamp is as close as
-    // possible to the physical press itself, not to anything caused by it.
-    // Fire-and-forget over the same REST channel, independent of WS state.
-    apiReportEvent("button_clock", "");
     hapticPulse(40);
     ApiResult r = apiPressClockButton();
     if (r == ApiResult::OK) {
