@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Arduino.h>
+
 void hapticInit();
 void hapticPulse(int durationMs = 50);
 void hapticDoubleClick();
@@ -12,3 +14,9 @@ void hapticError();
 // this rather than this module tracking elapsed time itself. Remove
 // alongside the rest of this instrumentation once the root cause is found.
 unsigned long hapticLastFiredMs();
+
+// TEMPORARY - shared by every WS-drop instrumentation call site (ws_client.cpp,
+// ws_network_client.cpp) so they all report the same " msSinceHaptic=<ms>"/
+// " msSinceHaptic=never" suffix. Remove alongside the rest of this
+// instrumentation once the root cause is found.
+String hapticDetailSuffix();

@@ -19,6 +19,12 @@ void hapticPulse(int durationMs) {
 
 unsigned long hapticLastFiredMs() { return g_lastFiredMs; }
 
+String hapticDetailSuffix() {
+  unsigned long lastHaptic = hapticLastFiredMs();
+  return lastHaptic == 0 ? " msSinceHaptic=never"
+                         : " msSinceHaptic=" + String(millis() - lastHaptic);
+}
+
 // Two short pulses: press acknowledged + response received.
 void hapticDoubleClick() {
   hapticPulse(50);

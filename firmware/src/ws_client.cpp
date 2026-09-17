@@ -2,6 +2,7 @@
 #include "scoreboard.h"
 #include "api.h"
 #include "battery.h"
+#include "haptic.h"
 #include <WebSocketsClient.h>
 #include <ArduinoJson.h>
 #include <string.h>
@@ -112,6 +113,14 @@ static void wsEvent(WStype_t type, uint8_t* payload, size_t length) {
       break;
     case WStype_DISCONNECTED:
       Serial.println("[ws] disconnected");
+      // TEMPORARY - this fires right as the library detects the drop, unlike
+      // ws_network_client.cpp's destructor-based "ws_teardown" report (which
+      // only runs on the *next* reconnect-loop tick and can trail the real
+      // drop by many seconds) - so msSinceHaptic here is the one to trust
+      // for correlating a drop against a recent button press. Remove
+      // alongside the rest of this instrumentation once the root cause is
+      // found.
+      apiReportEvent("ws_disconnected", hapticDetailSuffix());
       break;
     case WStype_TEXT:
       handleTextFrame(payload, length);

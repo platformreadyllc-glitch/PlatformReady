@@ -37,12 +37,6 @@
 // which keeps working even while this WS socket itself is wedged - same
 // reasoning as apiReportDiagnostics(). Remove alongside the rest of this
 // instrumentation once the root cause is found.
-static String hapticDetailSuffix() {
-  unsigned long lastHaptic = hapticLastFiredMs();
-  return lastHaptic == 0 ? " msSinceHaptic=never"
-                         : " msSinceHaptic=" + String(millis() - lastHaptic);
-}
-
 static void reportWsEvent(const char* tag, int result, bool isEthernet) {
   String detail = "result=" + String(result);
   if (isEthernet) {
@@ -101,13 +95,13 @@ WebSocketsNetworkClient::~WebSocketsNetworkClient() {
   // Captured before stop() - see reportWsEvent()'s "sockState" detail: this
   // tells us whether the socket was already CLOSED (clean) or still
   // ESTABLISHED/CLOSE_WAIT/etc. (meaning stop() below has to do real work,
-  // possibly its own up-to-_timeout wait) at the moment we tore down. This
-  // destructor runs right as the library gives up on the just-dropped
-  // connection - the closest point-in-time this instrumentation has to the
-  // actual drop itself (reportWsEvent() above only fires at the *next*
-  // connect attempt, which can trail the real drop by seconds) - so
-  // msSinceHaptic here is the one that actually matters for correlating a
-  // drop against a recent button press, not just the reconnect that follows.
+  // possibly its own up-to-_timeout wait) at the moment we tore down.
+  // NOTE: this destructor only runs on the *next* reconnect-loop tick, which
+  // can trail the actual drop by many seconds (WebSocketsClient.cpp rate-
+  // limits reconnect attempts) - so msSinceHaptic here is NOT a reliable
+  // proxy for "how long since haptic fired when the connection actually
+  // dropped". ws_client.cpp's WStype_DISCONNECTED handler reports that one,
+  // much closer to real-time; this one is still useful for sockState.
   bool isEthernet = _impl->activeIsEthernet;
   String before = isEthernet ? networkEthernetWsSocketState() : "n/a";
   _impl->active->stop();
