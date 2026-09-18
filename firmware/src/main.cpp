@@ -13,6 +13,8 @@
 #include "version.h"
 #include "watchdog.h"
 #include "ws_client.h"
+#include "battery.h"
+#include "transport_fsm.h"
 
 static RemoteConfig cfg;
 static bool registered = false;
@@ -22,6 +24,23 @@ static unsigned long lastOtaCheck = 0;
 static unsigned long lastActivityMs = 0;
 static unsigned long disconnectedSinceMs = 0;
 static bool wasDisconnected = false;
+// State for transportDecide() (transport_fsm.h) - held across loop()
+// iterations. Initial values are harmless: an apparent edge on the very
+// first call just starts the debounce window.
+static bool ethLastLinkUp = false;
+static unsigned long ethLinkStableSinceMs = 0;
+static unsigned long lastEthRecheckMs = 0;
+// Rate-gates the check itself (below), separate from transportDecide()'s
+// own internal debounce/recheck timers above - networkEthernetLinkPresent()
+// is a real SPI transaction to the W5500 (not free), and loop() otherwise
+// spins as fast as the CPU allows, so calling it unconditionally on every
+// single iteration was measurably adding latency to everything else in
+// loop() (button reads, WS heartbeat) even on WiFi-only units that never
+// use Ethernet at all. 200ms is still far finer-grained than the ~1s/~5s
+// thresholds transportDecide() itself cares about.
+static unsigned long lastTransportCheckMs = 0;
+// Temporary - see api.h's apiReportDiagnostics() comment.
+static unsigned long lastDiagnosticsReportMs = 0;
 static unsigned long lastScoreboardTick = 0;
 static unsigned long lastStatusChangeMs = 0;
 // How long a transient status word (WHITE, ERR, CLOCK, ...) stays on
@@ -89,7 +108,7 @@ static void refreshDisplay() {
                                    : formatPlatformRole(cfg.platformId, cfg.role);
   displayShowScoreboard(bottomText, toScoreVote(s.left), toScoreVote(s.chief),
                          toScoreVote(s.right), s.clock.remaining,
-                         networkIsEthernet());
+                         networkIsEthernet(), batteryGetLevel());
 }
 
 // ── WiFiManager portal with custom params for full config ────────────────────
@@ -146,6 +165,8 @@ void setup() {
   displayInit();
   Serial.println("[boot] displayInit done");
 
+  batteryInit();
+
   // Load saved config (may be empty on first boot)
   Serial.println("[boot] configLoad");
   configLoad(cfg);
@@ -174,7 +195,10 @@ void setup() {
     if (forceConfig) {
       webConfigRunEthernet(cfg);
     }
-    networkBeginWiFi();
+    // Decision: when Ethernet is up at boot, WiFi is never associated at
+    // all - no networkBeginWiFi(), no runWiFiManager(). The radio stays
+    // idle/unassociated but powered. (Runtime fallback to WiFi if the
+    // cable is later lost is handled separately, in loop().)
   } else {
     networkBeginWiFi();
     Serial.println("[boot] runWiFiManager");
@@ -198,6 +222,52 @@ void loop() {
   // Non-blocking regardless of WiFi state, and a no-op before wsInit() has
   // run - safe to pump unconditionally ahead of the network gate below.
   wsLoop();
+  // Samples on its own ~2s schedule internally - cheap to call every
+  // iteration, same pattern as wsLoop() above.
+  batteryLoop();
+  // Renews the Ethernet DHCP lease when due - internally self-rate-limited
+  // (see network.h), safe to call every iteration regardless of transport.
+  networkMaintainEthernet();
+
+  // ── Runtime Ethernet<->WiFi transport fallback ──────────────────────────
+  // Rate-gated (below), independent of the networkConnected() gate further
+  // down - a cable pull needs to be caught promptly (not just once "No
+  // network" has already kicked in), and a replug needs to be noticed even
+  // while sitting in that branch's own delay(2000) loop.
+  if (millis() - lastTransportCheckMs >= 200) {
+    lastTransportCheckMs = millis();
+    bool ethLinkUp = networkEthernetLinkPresent();
+    switch (transportDecide(networkIsEthernet(), ethLinkUp, ethLastLinkUp,
+                            ethLinkStableSinceMs, lastEthRecheckMs, millis())) {
+      case TransportAction::SWITCH_TO_WIFI:
+        Serial.println("[loop] Ethernet lost - falling back to WiFi");
+        networkFallbackToWiFi();
+        networkBeginWiFi();
+        networkAssociateWiFiNonInteractive();
+        wsNotifyTransportChanged(networkIsEthernet());
+        displayShowError("Eth lost, WiFi...");
+        break;
+      case TransportAction::SWITCH_TO_ETHERNET:
+        Serial.println("[loop] Ethernet link back - reclaiming from WiFi");
+        // WiFi is deliberately left associated-but-idle on success rather
+        // than torn down (no WiFi.disconnect()) - avoids flicker if the
+        // cable turns out to be marginal, and matches the boot-time
+        // decision to never proactively manage WiFi off.
+        //
+        // Shorter DHCP timeout than the boot call (2s vs 10s) - this can
+        // recur every ~5s (transportDecide()'s recheck interval) while a
+        // cable is present but DHCP isn't succeeding, and a full 10s block
+        // of loop() on every retry would stall button reads and the WS
+        // heartbeat for far too long to repeat that often. A failed 2s
+        // attempt just gets retried on the next recheck anyway.
+        if (networkTryEthernet(2000)) {
+          wsNotifyTransportChanged(networkIsEthernet());
+        }
+        break;
+      case TransportAction::STAY:
+        break;
+    }
+  }
 
   if (!networkConnected()) {
     if (disconnectedSinceMs == 0) disconnectedSinceMs = millis();
@@ -267,7 +337,7 @@ void loop() {
 
       // Opens the persistent connection used for liveness, live assignment
       // sync, and the mini-scoreboard - see ws_client.h.
-      wsInit(cfg.serial);
+      wsInit(cfg.serial, networkIsEthernet());
 
       // Don't make freshly-booted devices wait up to OTA_CHECK_INTERVAL_MS
       // for their first update check.
@@ -288,6 +358,16 @@ void loop() {
   if (!cfg.platformId.isEmpty() && millis() - lastScoreboardTick > 250) {
     lastScoreboardTick = millis();
     refreshDisplay();
+  }
+
+  // ── Temporary diagnostics (see api.h's apiReportDiagnostics()) ──────────
+  // Deliberately independent of WS connection state - REST keeps working
+  // even during the WS-over-Ethernet stuck-disconnected bug this exists to
+  // chase, so this is what makes it observable throughout a stuck period
+  // rather than only at the last successful WS connect.
+  if (millis() - lastDiagnosticsReportMs > 15000) {
+    lastDiagnosticsReportMs = millis();
+    apiReportDiagnostics(ESP.getFreeHeap(), millis(), wsIsConnected());
   }
 
   // ── Live assignment updates ─────────────────────────────────────────────

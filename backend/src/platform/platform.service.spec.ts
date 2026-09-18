@@ -226,11 +226,61 @@ describe('PlatformService ESP32 WS integration', () => {
     expect(gw.emitPlatformUpdate).toHaveBeenCalled();
   });
 
+  it('markRemoteConnected records the reported transport, markRemoteDisconnected clears it', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw, makeLc());
+    svc.ensurePlatform({ platformId: 'p1' });
+
+    svc.markRemoteConnected('kb-left', 'ethernet');
+    expect(svc.findRemote('kb-left')?.transport).toBe('ethernet');
+
+    svc.markRemoteDisconnected('kb-left');
+    expect(svc.findRemote('kb-left')?.transport).toBe(null);
+  });
+
+  it('markRemoteConnected records the reported battery voltage; disconnect leaves it as the last known reading', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw, makeLc());
+    svc.ensurePlatform({ platformId: 'p1' });
+
+    svc.markRemoteConnected('kb-left', 'wifi', 3.85);
+    expect(svc.findRemote('kb-left')?.batteryVoltage).toBe(3.85);
+
+    svc.markRemoteDisconnected('kb-left');
+    expect(svc.findRemote('kb-left')?.batteryVoltage).toBe(3.85);
+  });
+
   it('markRemoteConnected on an unknown remote is a no-op', () => {
     const gw = makeGateway();
     const svc = new PlatformService(gw, makeLc());
     expect(() => svc.markRemoteConnected('nope')).not.toThrow();
     expect(gw.emitPlatformUpdate).not.toHaveBeenCalled();
+  });
+
+  it('reportDiagnostics merges fields into the remote metadata', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw, makeLc());
+    svc.ensurePlatform({ platformId: 'p1' });
+
+    svc.reportDiagnostics('kb-left', {
+      freeHeap: 123456,
+      uptimeMs: 9000,
+      wsConnectedLocally: true,
+    });
+
+    const metadata = svc.findRemote('kb-left')?.metadata;
+    expect(metadata).toMatchObject({
+      freeHeap: 123456,
+      uptimeMs: 9000,
+      wsConnectedLocally: true,
+    });
+    expect(typeof metadata?.reportedAt).toBe('string');
+  });
+
+  it('reportDiagnostics on an unknown remote is a no-op', () => {
+    const gw = makeGateway();
+    const svc = new PlatformService(gw, makeLc());
+    expect(() => svc.reportDiagnostics('nope', { freeHeap: 1 })).not.toThrow();
   });
 
   it('markRemoteConnected pushes the platform snapshot to the joining remote', () => {

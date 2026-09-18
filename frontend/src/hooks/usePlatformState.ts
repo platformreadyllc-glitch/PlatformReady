@@ -41,7 +41,7 @@ const BACKEND_URL_ID = (id: string) => `platform-${id}`
 // connection to report, so callers should skip rendering a badge for them.
 function toRemoteConnection(remote: BackendRemote | undefined): RemoteConnection | null {
   if (!remote || isKbRemote(remote.remoteId)) return null
-  return { connected: remote.connected }
+  return { connected: remote.connected, transport: remote.transport }
 }
 
 /**

@@ -135,6 +135,27 @@ static void drawScoreColumn(int centerX, const ScoreVote& vote) {
   }
 }
 
+// Battery icon, bottom-left corner of the yellow strip (mirrors the
+// connection-type text opposite it, below) - unlike a wifi/ethernet glyph,
+// a battery shape is compact and iconic enough to read clearly even at
+// this size, so this one's hand-drawn rather than text: FULL fully filled,
+// MEDIUM half-filled, LOW just the outline.
+static void drawBatteryIcon(BatteryLevel level) {
+  const int x = 0, y = 51, w = 14, h = 7;
+  u8g2.drawFrame(x, y, w, h);
+  u8g2.drawBox(x + w, y + 2, 2, h - 4);  // terminal nub
+
+  int fillWidth = 0;
+  switch (level) {
+    case BatteryLevel::BATT_FULL:   fillWidth = w - 2;       break;
+    case BatteryLevel::BATT_MEDIUM: fillWidth = (w - 2) / 2; break;
+    case BatteryLevel::BATT_LOW:    fillWidth = 0;           break;
+  }
+  if (fillWidth > 0) {
+    u8g2.drawBox(x + 1, y + 1, fillWidth, h - 2);
+  }
+}
+
 // The panel is physically two-color (confirmed on hardware: with this
 // project's U8G2_R2 rotation, the top ~48 rows render on the blue segment,
 // the bottom ~16 on yellow) - live/frequently-changing info (votes, clock)
@@ -143,7 +164,8 @@ static void drawScoreColumn(int centerX, const ScoreVote& vote) {
 // layout.
 void displayShowScoreboard(const String& status, const ScoreVote& left,
                             const ScoreVote& chief, const ScoreVote& right,
-                            float clockRemaining, bool isEthernet) {
+                            float clockRemaining, bool isEthernet,
+                            BatteryLevel batteryLevel) {
   if (!g_displayPresent) return;
   u8g2.clearBuffer();
 
@@ -157,6 +179,8 @@ void displayShowScoreboard(const String& status, const ScoreVote& left,
 
   u8g2.setFont(u8g2_font_6x10_tf);
   u8g2.drawStr((128 - u8g2.getStrWidth(status.c_str())) / 2, 58, status.c_str());
+
+  drawBatteryIcon(batteryLevel);
 
   // Connection-type indicator, bottom-right corner of the yellow strip.
   // A hand-drawn wifi/ethernet glyph would be unreadable at this scale on

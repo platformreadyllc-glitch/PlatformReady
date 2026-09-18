@@ -7,10 +7,11 @@ import {
 } from '@nestjs/common';
 import { PlatformManager } from './models/platform-manager';
 import { Platform } from './models/platform';
-import { Button, Role, ClockMode, ClockState } from './models/enums';
+import { Button, Role, ClockMode, ClockState, Transport } from './models/enums';
 import { CreatePlatformDto } from './dto/create-platform.dto';
 import { RegisterRemoteDto } from './dto/register-remote.dto';
 import { RegisterPhysicalRemoteDto } from './dto/register-physical-remote.dto';
+import { ReportDiagnosticsDto } from './dto/report-diagnostics.dto';
 import { ReplaceRemoteDto } from './dto/replace-remote.dto';
 import { TransferRemoteDto } from './dto/transfer-remote.dto';
 import { EnsurePlatformDto } from './dto/ensure-platform.dto';
@@ -53,10 +54,31 @@ export class PlatformService {
     return this.manager.findRemote(remoteId);
   }
 
-  markRemoteConnected(remoteId: string): void {
+  // Temporary debugging tool for the WS-over-Ethernet "connects once, then
+  // stuck disconnected forever" bug - see ReportDiagnosticsDto. Reported
+  // over REST on a periodic timer independent of WS state, so it's
+  // observable throughout a stuck period rather than only at the last
+  // successful WS connect. A no-op on an unknown remoteId (device could be
+  // reporting before/after any registration edge case) - never worth
+  // erroring a background diagnostic ping over.
+  reportDiagnostics(remoteId: string, dto: ReportDiagnosticsDto): void {
     const remote = this.manager.findRemote(remoteId);
     if (!remote) return;
-    remote.connect();
+    remote.metadata = {
+      ...remote.metadata,
+      ...dto,
+      reportedAt: new Date().toISOString(),
+    };
+  }
+
+  markRemoteConnected(
+    remoteId: string,
+    transport: Transport = null,
+    batteryVoltage: number | null = null,
+  ): void {
+    const remote = this.manager.findRemote(remoteId);
+    if (!remote) return;
+    remote.connect(transport, batteryVoltage);
     this.emitIfActive(remote, true);
   }
 

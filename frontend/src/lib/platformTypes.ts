@@ -23,6 +23,7 @@ export const ROLE_COLOR: Record<Role, string> = {
 
 export interface RemoteConnection {
   connected: boolean
+  transport: 'wifi' | 'ethernet' | null
 }
 
 // kb-* remotes are the frontend's own virtual keyboard-simulated referees,

@@ -25,3 +25,11 @@
 
 // ── Hold this button at power-on to enter config mode ────────────────────────
 #define BTN_CONFIG  BTN_WHITE
+
+// ── Battery voltage sense ─────────────────────────────────────────────────────
+// Simple two-resistor (100k/100k) divider from BATT+ to GND; this pin reads
+// the midpoint, i.e. half the true battery voltage - battery.cpp multiplies
+// the reading back up. GPIO2 is an ADC2 pin, which on the classic ESP32
+// (not S2/S3/C3) is shared with the WiFi driver and can spuriously fail to
+// read while WiFi is associated - see battery.cpp's note on the mitigation.
+#define BATT_SENSE  2

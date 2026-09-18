@@ -1,17 +1,40 @@
 #include "ws_client.h"
 #include "scoreboard.h"
 #include "api.h"
+#include "battery.h"
+#include "haptic.h"
 #include <WebSocketsClient.h>
 #include <ArduinoJson.h>
 #include <string.h>
 
-// WebSocketsClient manages its own internal WiFiClient and doesn't accept
-// an injected generic Client* the way ArduinoHttpClient's HttpClient does
-// (see network.cpp's networkNewClient()) - so, like OTA before it got that
-// treatment, this connection is WiFi-only. Non-issue today: Ethernet is
-// -DSKIP_ETHERNET'd off. See firmware/README.md.
+// Routed through WEBSOCKETS_NETWORK_TYPE=NETWORK_CUSTOM (platformio.ini) +
+// ws_network_client.cpp, so this connection follows whichever transport
+// network.cpp's networkIsEthernet() currently reports, same as REST/OTA
+// (networkNewClient()) - unlike the plain default build, which hardcodes
+// a WiFiClient internally.
 static WebSocketsClient webSocket;
 static bool g_started = false;
+// Set once by wsInit(), reused by wsNotifyTransportChanged() to rebuild
+// the URL (the ?transport= query param needs to change on every runtime
+// transport switch, not just at initial connect).
+static String g_remoteId;
+
+// batteryVoltage/freeHeap are one-shot diagnostic snapshots as of connect
+// time, not a live telemetry feed - there's no serial/USB access to these
+// units to check readings directly otherwise, and reconnects (transport
+// switches, drops) happen often enough for this to stay reasonably fresh
+// without needing its own separate reporting channel. freeHeap is here
+// specifically to chase the WS-over-Ethernet "connects once, then stuck
+// disconnected forever" bug - a heap leak in the reconnect cycle (e.g. a
+// `new` silently failing once heap runs low, common on Arduino/ESP-IDF
+// with exceptions disabled) would produce exactly that symptom too, and
+// can't be ruled out from reading source alone.
+static String wsUrl(const String& remoteId, bool isEthernet) {
+  return "/esp32-ws?remoteId=" + remoteId +
+         "&transport=" + (isEthernet ? "ethernet" : "wifi") +
+         "&batteryVoltage=" + String(batteryGetVoltage(), 2) +
+         "&freeHeap=" + String(ESP.getFreeHeap());
+}
 
 struct PendingAssignment {
   bool pending = false;
@@ -90,6 +113,14 @@ static void wsEvent(WStype_t type, uint8_t* payload, size_t length) {
       break;
     case WStype_DISCONNECTED:
       Serial.println("[ws] disconnected");
+      // TEMPORARY - this fires right as the library detects the drop, unlike
+      // ws_network_client.cpp's destructor-based "ws_teardown" report (which
+      // only runs on the *next* reconnect-loop tick and can trail the real
+      // drop by many seconds) - so msSinceHaptic here is the one to trust
+      // for correlating a drop against a recent button press. Remove
+      // alongside the rest of this instrumentation once the root cause is
+      // found.
+      apiReportEvent("ws_disconnected", hapticDetailSuffix());
       break;
     case WStype_TEXT:
       handleTextFrame(payload, length);
@@ -99,21 +130,52 @@ static void wsEvent(WStype_t type, uint8_t* payload, size_t length) {
   }
 }
 
-void wsInit(const String& remoteId) {
-  String url = "/esp32-ws?remoteId=" + remoteId;
-  webSocket.begin(apiGetHost(), apiGetPort(), url);
+void wsInit(const String& remoteId, bool isEthernet) {
+  g_remoteId = remoteId;
+  webSocket.begin(apiGetHost(), apiGetPort(), wsUrl(remoteId, isEthernet));
   webSocket.onEvent(wsEvent);
-  webSocket.setReconnectInterval(5000);
+  // Was 5000ms - tightened alongside the heartbeat below, for the same
+  // reason (see its comment): the first reconnect attempt after a
+  // heartbeat-triggered disconnect still has to wait out this interval.
+  webSocket.setReconnectInterval(2000);
   // The backend's own 2s ping keeps its liveness view current regardless;
-  // this is purely for the client's own connection to notice a dead
-  // backend and cycle instead of hanging silently.
-  webSocket.enableHeartbeat(15000, 3000, 2);
+  // this is for the client's own connection to notice a dead/stale
+  // connection and cycle instead of hanging silently - previously
+  // (15000, 3000, 2), ~20s+ worst case to notice. That was known and
+  // deliberately deferred (see the project_ws_reconnect_latency memory
+  // note) since it rarely mattered on WiFi - but confirmed via live
+  // Ethernet testing to matter a lot there: the W5500's TCP stack doesn't
+  // reliably detect an abrupt server-side close (tcp->connected() stays
+  // true even once the backend has already dropped the connection), so
+  // this client-side heartbeat is the ONLY thing that ever notices and
+  // forces a reconnect - and 20s+ to do so, repeatedly, is a real problem
+  // for "fast and reliable". Tightened to a ~10s worst case. Still cheap
+  // either way - ping/pong frames are a few bytes, nothing next to normal
+  // vote/clock traffic even at this cadence.
+  webSocket.enableHeartbeat(5000, 3000, 2);
   g_started = true;
 }
 
 void wsLoop() {
   if (!g_started) return;
   webSocket.loop();
+}
+
+bool wsIsConnected() {
+  return g_started && webSocket.isConnected();
+}
+
+void wsNotifyTransportChanged(bool isEthernet) {
+  if (!g_started) return;
+  // disconnect() first properly tears down any live connection (stops and
+  // deletes the underlying wrapper) before begin() below resets its tcp
+  // pointer to NULL again - calling begin() directly on a live connection
+  // would otherwise leak the old wrapper instead of freeing it. begin()
+  // only touches _host/_port/the connection state, not the event
+  // callback/reconnect-interval/heartbeat config set above, so those don't
+  // need to be reapplied.
+  webSocket.disconnect();
+  webSocket.begin(apiGetHost(), apiGetPort(), wsUrl(g_remoteId, isEthernet));
 }
 
 bool wsPollAssignmentChange(String& platformId, String& role) {

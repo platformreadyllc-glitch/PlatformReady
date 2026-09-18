@@ -10,12 +10,23 @@ import type { IncomingMessage } from 'http';
 import type { Duplex } from 'stream';
 import { WebSocketServer, WebSocket } from 'ws';
 import { PlatformService } from './platform.service';
-import { Role, Button } from './models/enums';
+import { Role, Button, Transport } from './models/enums';
 import { PlatformClockSerialized } from './models/platform-clock';
+import { logConnEvent } from './conn-log';
 
 type LiveSocket = WebSocket & { isAlive?: boolean };
 
 const ESP_WS_PATH = '/esp32-ws';
+
+function parseTransport(raw: string | null): Transport {
+  return raw === 'wifi' || raw === 'ethernet' ? raw : null;
+}
+
+function parseBatteryVoltage(raw: string | null): number | null {
+  if (raw === null) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
 
 // How often each connection is pinged, and therefore roughly how long a
 // power-cycled remote's connected status takes to flip back to false (worst
@@ -68,10 +79,12 @@ export class EspRemotesGateway
     httpServer.on('upgrade', this.upgradeHandler);
 
     this.wss.on('connection', (ws: LiveSocket, req: IncomingMessage) => {
-      const remoteId = new URL(
-        req.url ?? '',
-        'http://esp32-ws.local',
-      ).searchParams.get('remoteId');
+      const url = new URL(req.url ?? '', 'http://esp32-ws.local');
+      const remoteId = url.searchParams.get('remoteId');
+      const transport = parseTransport(url.searchParams.get('transport'));
+      const batteryVoltage = parseBatteryVoltage(
+        url.searchParams.get('batteryVoltage'),
+      );
 
       if (!remoteId || !this.platformService.findRemote(remoteId)) {
         ws.close(4000, 'unknown remote');
@@ -83,30 +96,62 @@ export class EspRemotesGateway
       // reaps it (hours). Terminate it now; its `close` handler no-ops
       // because the map no longer points at it.
       const superseded = this.connections.get(remoteId);
-      if (superseded && superseded !== ws) superseded.terminate();
+      if (superseded && superseded !== ws) {
+        logConnEvent(remoteId, 'superseded (terminating stale socket)');
+        superseded.terminate();
+      }
+
+      logConnEvent(
+        remoteId,
+        `connect transport=${transport ?? 'unknown'} battery=${batteryVoltage ?? 'n/a'}`,
+      );
 
       this.connections.set(remoteId, ws);
-      this.platformService.markRemoteConnected(remoteId);
+      this.platformService.markRemoteConnected(
+        remoteId,
+        transport,
+        batteryVoltage,
+      );
 
       ws.isAlive = true;
       ws.on('pong', () => {
         ws.isAlive = true;
       });
 
-      ws.on('close', () => {
+      // Without this, a malformed frame (a buggy/corrupted client - this
+      // is exactly how a real firmware bug surfaced: a bad Ethernet-path
+      // write() elsewhere corrupted the frame stream and the `ws` package
+      // threw "Invalid WebSocket frame: RSV1 must be clear") is an
+      // unhandled 'error' event, which crashes the entire backend process
+      // - wiping all in-memory state for every remote/platform, not just
+      // this one connection. Log and drop just this connection instead.
+      ws.on('error', (err) => {
+        console.error(`[esp-remotes] WS error for ${remoteId}:`, err);
+        logConnEvent(remoteId, `error ${String(err)}`);
+        ws.terminate();
+      });
+
+      ws.on('close', (code?: number, reason?: Buffer) => {
         // Only clear state if this socket is still the one on record - a
         // superseded old socket closing shouldn't stomp on a newer
         // reconnect's state.
         if (this.connections.get(remoteId) === ws) {
+          logConnEvent(
+            remoteId,
+            `close code=${code ?? 'n/a'} reason=${reason?.toString() || 'n/a'} isAlive=${ws.isAlive}`,
+          );
           this.connections.delete(remoteId);
           this.platformService.markRemoteDisconnected(remoteId);
+        } else {
+          logConnEvent(remoteId, `close (superseded socket) code=${code}`);
         }
       });
     });
 
     this.heartbeatTimer = setInterval(() => {
-      for (const ws of this.connections.values()) {
+      for (const [remoteId, ws] of this.connections.entries()) {
         if (ws.isAlive === false) {
+          logConnEvent(remoteId, 'heartbeat: missed pong, terminating');
           ws.terminate();
           continue;
         }
