@@ -3,11 +3,15 @@ import { ChevronDown, ChevronUp } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PlatformCard } from '@/components/PlatformCard'
 import { API, platformAction } from '@/hooks/usePlatformSocket'
-import { dayLabel, formatTime, readActiveDayState, writeActiveDayState } from '@/lib/platformHelpers'
-import { STORAGE_KEY, type StoredMeetConfig } from '@/lib/platformTypes'
+import { useMeetSummary } from '@/hooks/useMeetSummary'
+import { activePlatformsForDay, dayLabel, formatTime, postActiveDay } from '@/lib/platformHelpers'
 
 // ---------------------------------------------------------------------------
-// Local types for the full meet config (superset of StoredMeetConfig)
+// Local types for the full meet config - matches the backend's
+// SaveMeetConfigDto (backend/src/meet-config/dto/), fetched fresh from
+// GET /api/meet-config rather than localStorage. Deliberately NOT
+// token-gated on the backend (unlike saving it) - see that endpoint's
+// comment: Start Day below needs the real LC password from any computer.
 // ---------------------------------------------------------------------------
 
 interface FullDayConfig {
@@ -34,17 +38,6 @@ interface PlatformConnectResult {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function readActivePlatformCount(dayIndex: number): number {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return 0
-    const config: StoredMeetConfig = JSON.parse(raw)
-    return (config.days?.[dayIndex]?.platforms ?? []).filter((p) => p.active).length
-  } catch {
-    return 0
-  }
-}
-
 function durationUntil(timeStr: string, now: number): number {
   const [h, m] = timeStr.split(':').map(Number)
   const target = new Date(now)
@@ -59,10 +52,19 @@ function durationUntil(timeStr: string, now: number): number {
 
 export default function DirectorView() {
   // ── Day Control state ───────────────────────────────────────────────────
-  const [activeDayIndex, setActiveDayIndex] = useState(() => readActiveDayState().index)
-  const [completedDayIndices, setCompletedDayIndices] = useState(
-    () => readActiveDayState().completedIndices,
-  )
+  // summary.activeDayIndex/completedDayIndices are the source of truth
+  // (shared across every browser); these two are the optimistic local
+  // mirror so the UI responds instantly to this browser's own actions
+  // instead of waiting on a round-trip - kept in sync from the summary
+  // below whenever it (re)loads, e.g. after another computer changes it.
+  const { summary } = useMeetSummary()
+  const [activeDayIndex, setActiveDayIndex] = useState(0)
+  const [completedDayIndices, setCompletedDayIndices] = useState<number[]>([])
+  useEffect(() => {
+    if (!summary) return
+    setActiveDayIndex(summary.activeDayIndex)
+    setCompletedDayIndices(summary.completedDayIndices)
+  }, [summary])
   const [meetConfig, setMeetConfig] = useState<FullMeetConfig | null>(null)
   const [dayControlOpen, setDayControlOpen] = useState(false)
   const [startingDay, setStartingDay] = useState<number | null>(null)
@@ -80,12 +82,13 @@ export default function DirectorView() {
     return () => clearInterval(id)
   }, [])
 
-  // Load full meet config from localStorage
+  // Load the full meet config from the backend - not token-gated (unlike
+  // saving it), see this file's top comment.
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      if (raw) setMeetConfig(JSON.parse(raw) as FullMeetConfig)
-    } catch {}
+    fetch('/api/meet-config')
+      .then((r) => (r.ok ? (r.json() as Promise<FullMeetConfig | null>) : null))
+      .then((data) => { if (data) setMeetConfig(data) })
+      .catch(() => {})
   }, [])
 
   // Restore break indicator after a page refresh
@@ -97,7 +100,7 @@ export default function DirectorView() {
   }, [])
 
   // ── Derived values ──────────────────────────────────────────────────────
-  const platformCount = readActivePlatformCount(activeDayIndex)
+  const platformCount = activePlatformsForDay(summary, activeDayIndex).length
   const isMultiDay = (meetConfig?.numDays ?? 1) > 1
   const globalBreakActive = breakEndsAt !== null && now < breakEndsAt
   const targetPreview = targetTime ? durationUntil(targetTime, now) : null
@@ -134,9 +137,10 @@ export default function DirectorView() {
 
     if (activeLcPlatforms.length === 0) {
       // No LC platforms configured — just switch the day
-      const newState = { index: di, completedIndices: completedDayIndices }
-      writeActiveDayState(newState)
       setActiveDayIndex(di)
+      postActiveDay(di, completedDayIndices).catch((e) =>
+        console.error('[meet-config] failed to persist active day', e),
+      )
       return
     }
 
@@ -192,9 +196,10 @@ export default function DirectorView() {
     )
 
     if (results.some((r) => r.status === 'fulfilled')) {
-      const newState = { index: di, completedIndices: completedDayIndices }
-      writeActiveDayState(newState)
       setActiveDayIndex(di)
+      postActiveDay(di, completedDayIndices).catch((e) =>
+        console.error('[meet-config] failed to persist active day', e),
+      )
     }
 
     setStartingDay(null)
@@ -203,8 +208,10 @@ export default function DirectorView() {
   function handleMarkComplete(di: number) {
     if (completedDayIndices.includes(di)) return
     const newCompleted = [...completedDayIndices, di]
-    writeActiveDayState({ index: activeDayIndex, completedIndices: newCompleted })
     setCompletedDayIndices(newCompleted)
+    postActiveDay(activeDayIndex, newCompleted).catch((e) =>
+      console.error('[meet-config] failed to persist active day', e),
+    )
   }
 
   // ── Render ──────────────────────────────────────────────────────────────

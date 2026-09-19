@@ -1,11 +1,20 @@
-export interface StoredPlatform {
+export interface MeetSummaryPlatform {
   name: string
   active: boolean
 }
 
-export interface StoredMeetConfig {
+// Public, secret-free view of the meet config - no LiftingCast
+// meetId/password (see backend/src/meet-config/meet-config.service.ts's
+// MeetConfigSummary, which this mirrors). Fetched from the backend
+// (useMeetSummary hook) rather than read from localStorage - every page
+// other than Meet Setup itself uses this, so every browser on the LAN sees
+// the same configured meet instead of only the one that ran Meet Setup.
+export interface MeetSummary {
+  name: string
   startDate: string
-  days: Array<{ platforms: StoredPlatform[] }>
+  days: Array<{ platforms: MeetSummaryPlatform[] }>
+  activeDayIndex: number
+  completedDayIndices: number[]
 }
 
 export type VoteButton = 'white' | 'red' | 'blue' | 'yellow'
@@ -60,8 +69,6 @@ export const INITIAL_VOTES: Record<Role, VoteButton | null> = {
   chief: null,
   right: null,
 }
-
-export const STORAGE_KEY = 'platformready_meet'
 
 export const KEY_MAP: Record<string, [Role, VoteButton]> = {
   q: ['left', 'white'],  w: ['left', 'red'],   e: ['left', 'blue'],   r: ['left', 'yellow'],
