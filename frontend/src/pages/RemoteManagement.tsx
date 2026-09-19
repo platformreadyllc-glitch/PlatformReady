@@ -14,7 +14,8 @@ import { io, Socket } from 'socket.io-client'
 import { Wifi, EthernetPort } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { API } from '@/hooks/usePlatformSocket'
-import { readActivePlatforms } from '@/lib/platformHelpers'
+import { activePlatformsForDay } from '@/lib/platformHelpers'
+import type { MeetSummary } from '@/lib/platformTypes'
 
 type HardwareType = 'side' | 'chief'
 
@@ -321,7 +322,13 @@ export default function RemoteManagement() {
     setLoading(true)
     setError(null)
     try {
-      const configured = readActivePlatforms()
+      // Fetched fresh here rather than via useMeetSummary() - this runs
+      // imperatively (mount + every drag-drop reassignment), and needs
+      // whatever's on the backend right at that moment, not a possibly-
+      // stale value from a separately-timed hook.
+      const summaryRes = await fetch('/api/meet-config/summary')
+      const summary: MeetSummary | null = summaryRes.ok ? await summaryRes.json() : null
+      const configured = activePlatformsForDay(summary, summary?.activeDayIndex ?? 0)
       const activePlatformIds = configured.map((_, i) => `platform-${i + 1}`)
 
       await Promise.all(
