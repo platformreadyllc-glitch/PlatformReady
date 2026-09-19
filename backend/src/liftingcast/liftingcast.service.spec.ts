@@ -220,9 +220,7 @@ describe('LiftingCastService', () => {
 
       await service.fetchUpcomingMeets('http://192.168.1.50');
 
-      expect(http.get).toHaveBeenCalledWith(
-        'http://192.168.1.50/api/meets',
-      );
+      expect(http.get).toHaveBeenCalledWith('http://192.168.1.50/api/meets');
     });
   });
 });
