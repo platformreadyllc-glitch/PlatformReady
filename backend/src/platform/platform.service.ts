@@ -19,6 +19,7 @@ import { PlatformGateway } from './platform.gateway';
 import { EspRemotesGateway } from './esp-remotes.gateway';
 import { LiftingCastService } from '../liftingcast/liftingcast.service';
 import { Remote } from './models/remote';
+import { PlatformClock } from './models/platform-clock';
 
 @Injectable()
 export class PlatformService {
@@ -364,6 +365,38 @@ export class PlatformService {
     }
   }
 
+  // Every break-ending path (cancelPlatformBreak, cancelGlobalBreak, and
+  // scheduleBreakReset's own auto-timeout) needs this same pair of calls -
+  // same reasoning as pressClockButton's notifySetClock-then-notifyClockStart
+  // above: LiftingCast's own clock duration is sticky server-side, staying
+  // at whatever was last configured (the break's duration) until something
+  // tells it otherwise. notifyClockReset() alone just restarts LC's timer
+  // at that still-stale duration - callers already call
+  // platform.clock.resetToActive() first (putting the duration argument
+  // here at the correct 60s), so this only needs to push that duration to
+  // LC before resetting it there too. Was previously done via
+  // notifyClockReset() alone at each of the 3 call sites, which is exactly
+  // why the LC-side clock kept showing the break's duration instead of 1:00
+  // once a break ended.
+  private notifyLcClockResetToActive(platformId: string, clock: PlatformClock) {
+    this.liftingCast
+      .notifySetClock(platformId, clock.serialize().duration)
+      .then(() =>
+        this.liftingCast.notifyClockReset(platformId).catch((e: unknown) => {
+          console.error(
+            '[LC] clock reset notification failed',
+            (e as Error).message,
+          );
+        }),
+      )
+      .catch((e: unknown) => {
+        console.error(
+          '[LC] set clock notification failed',
+          (e as Error).message,
+        );
+      });
+  }
+
   resetAttempt(platformId: string) {
     this.cancelVoteReset(platformId);
     this.cancelClockTick(platformId);
@@ -599,12 +632,7 @@ export class PlatformService {
     }
     platform.clock.resetToActive();
     this.cancelClockTick(platformId);
-    this.liftingCast.notifyClockReset(platformId).catch((e: unknown) => {
-      console.error(
-        '[LC] clock reset notification failed',
-        (e as Error).message,
-      );
-    });
+    this.notifyLcClockResetToActive(platformId, platform.clock);
     this.broadcastPlatformUpdate(platformId, platform);
     return platform.serialize();
   }
@@ -619,14 +647,7 @@ export class PlatformService {
       }
       platform.clock.resetToActive();
       this.cancelClockTick(platform.platformId);
-      this.liftingCast
-        .notifyClockReset(platform.platformId)
-        .catch((e: unknown) => {
-          console.error(
-            '[LC] clock reset notification failed',
-            (e as Error).message,
-          );
-        });
+      this.notifyLcClockResetToActive(platform.platformId, platform.clock);
     }
     const all = this.manager.serializeAll();
     this.gateway.emitGlobalUpdate(all);
@@ -645,12 +666,7 @@ export class PlatformService {
       if (platform.clock.mode === ClockMode.BREAK) {
         platform.clock.resetToActive();
         this.cancelClockTick(platformId);
-        this.liftingCast.notifyClockReset(platformId).catch((e: unknown) => {
-          console.error(
-            '[LC] clock reset notification failed',
-            (e as Error).message,
-          );
-        });
+        this.notifyLcClockResetToActive(platformId, platform.clock);
         this.broadcastPlatformUpdate(platformId, platform);
       }
     }, durationSeconds * 1000);

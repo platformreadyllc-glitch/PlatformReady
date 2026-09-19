@@ -37,7 +37,12 @@ interface MeetConfig {
 
 type TestState = 'idle' | 'loading' | 'success' | 'error'
 
-const STORAGE_KEY = 'platformready_meet'
+// Kept in sessionStorage (not localStorage) - deliberately scoped to this
+// browser tab's session rather than persisting indefinitely, since it
+// grants write access to the shared meet config. Reading/pre-filling the
+// form itself needs no token at all (see GET /meet-config's comment on the
+// backend) - only this file's actual save goes through the gate.
+const ADMIN_TOKEN_KEY = 'platformready_meet_admin_token'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -76,6 +81,17 @@ export default function MeetSetup() {
   const [perDayPasswords, setPerDayPasswords] = useState(false)
   const [days, setDays] = useState<DayConfig[]>(() => buildEmptyDays(1, 1))
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  // Admin-password gate on saving (not viewing) - see ADMIN_TOKEN_KEY's
+  // comment and the backend's meet-config module.
+  const [adminToken, setAdminToken] = useState<string | null>(() =>
+    sessionStorage.getItem(ADMIN_TOKEN_KEY)
+  )
+  const [unlockPrompt, setUnlockPrompt] = useState(false)
+  const [unlockPasswordInput, setUnlockPasswordInput] = useState('')
+  const [unlockError, setUnlockError] = useState<string | null>(null)
+  const [unlocking, setUnlocking] = useState(false)
 
   const [testStatus, setTestStatus] = useState<Record<string, TestState>>({})
   const [testErrors, setTestErrors] = useState<Record<string, string>>({})
@@ -99,28 +115,32 @@ export default function MeetSetup() {
     setPlatformNames({})
   }
 
-  // Load saved config from localStorage on first render
+  // Load the saved config from the backend on first render - shared across
+  // every browser on the LAN, replacing the old localStorage read. No
+  // admin token needed to view/pre-fill (see GET /meet-config's comment) -
+  // only actually saving is gated.
   useEffect(() => {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return
-    try {
-      const config: MeetConfig = JSON.parse(raw)
-      setName(config.name)
-      setStartDate(config.startDate)
-      setNumDays(config.numDays)
-      setNumPlatforms(config.numPlatforms)
-      setPassword(config.liftingCastPassword)
-      setPerDayPasswords(config.perDayPasswords ?? false)
-      setDays(
-        config.days.map((day) => ({
-          ...day,
-          liftingCastPassword: day.liftingCastPassword ?? '',
-          platforms: day.platforms.map((p) => ({ ...p, active: p.active ?? true })),
-        }))
-      )
-    } catch {
-      // ignore malformed data
-    }
+    fetch('/api/meet-config')
+      .then((res) => (res.ok ? (res.json() as Promise<MeetConfig | null>) : null))
+      .then((config) => {
+        if (!config) return
+        setName(config.name)
+        setStartDate(config.startDate)
+        setNumDays(config.numDays)
+        setNumPlatforms(config.numPlatforms)
+        setPassword(config.liftingCastPassword)
+        setPerDayPasswords(config.perDayPasswords ?? false)
+        setDays(
+          config.days.map((day) => ({
+            ...day,
+            liftingCastPassword: day.liftingCastPassword ?? '',
+            platforms: day.platforms.map((p) => ({ ...p, active: p.active ?? true })),
+          }))
+        )
+      })
+      .catch(() => {
+        // ignore - form just stays at its empty default
+      })
   }, [])
 
   // Rebuild the days grid whenever numDays or numPlatforms changes.
@@ -241,6 +261,7 @@ export default function MeetSetup() {
     const day = days[dayIndex]
     const platform = day.platforms[platformIndex]
     const effectivePassword = (numDays === 1 || perDayPasswords) ? day.liftingCastPassword : password
+    const relayUrl = importSource === 'relay' && relayIp ? `http://${relayIp}` : undefined
     setTestStatus((s) => ({ ...s, [key]: 'loading' }))
     try {
       const res = await fetch('/api/liftingcast/test-connection', {
@@ -250,6 +271,7 @@ export default function MeetSetup() {
           meetId: day.liftingCastMeetId,
           platformId: platform.liftingCastPlatformId,
           password: effectivePassword,
+          relayUrl,
         }),
       })
       if (!res.ok) throw new Error(`Server error ${res.status}`)
@@ -267,6 +289,7 @@ export default function MeetSetup() {
             meetId: day.liftingCastMeetId,
             lcPlatformId: platform.liftingCastPlatformId,
             password: effectivePassword,
+            relayUrl,
           }),
         })
           .then((r) => {
@@ -387,9 +410,8 @@ export default function MeetSetup() {
     setImportOpen(false)
   }
 
-  function handleSave(e: { preventDefault(): void }) {
-    e.preventDefault()
-    const config: MeetConfig = {
+  function buildConfig(): MeetConfig {
+    return {
       name,
       startDate,
       numDays,
@@ -398,9 +420,75 @@ export default function MeetSetup() {
       perDayPasswords,
       days,
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(config))
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+  }
+
+  // Returns true on success. 401 means the token is missing/stale (e.g. a
+  // backend restart wiped it, or it's simply never been set in this
+  // browser) - reprompt rather than surfacing a raw error.
+  async function saveWithToken(token: string): Promise<boolean> {
+    setSaveError(null)
+    try {
+      const res = await fetch('/api/meet-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-meet-admin-token': token },
+        body: JSON.stringify(buildConfig()),
+      })
+      if (res.status === 401) {
+        sessionStorage.removeItem(ADMIN_TOKEN_KEY)
+        setAdminToken(null)
+        setUnlockPrompt(true)
+        setUnlockError('Session expired — enter the password again.')
+        return false
+      }
+      if (!res.ok) {
+        setSaveError(`Save failed (HTTP ${res.status})`)
+        return false
+      }
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+      return true
+    } catch {
+      setSaveError('Network error — could not reach the server.')
+      return false
+    }
+  }
+
+  function handleSave(e: { preventDefault(): void }) {
+    e.preventDefault()
+    if (adminToken) {
+      void saveWithToken(adminToken)
+    } else {
+      setUnlockError(null)
+      setUnlockPrompt(true)
+    }
+  }
+
+  async function handleUnlockSubmit(e: { preventDefault(): void }) {
+    e.preventDefault()
+    setUnlocking(true)
+    setUnlockError(null)
+    try {
+      const res = await fetch('/api/meet-config/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: unlockPasswordInput }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        setUnlockError((data as { message?: string })?.message ?? 'Incorrect password')
+        return
+      }
+      const { token } = (await res.json()) as { token: string }
+      sessionStorage.setItem(ADMIN_TOKEN_KEY, token)
+      setAdminToken(token)
+      setUnlockPasswordInput('')
+      const ok = await saveWithToken(token)
+      if (ok) setUnlockPrompt(false)
+    } catch {
+      setUnlockError('Network error — could not reach the server.')
+    } finally {
+      setUnlocking(false)
+    }
   }
 
   return (
@@ -725,11 +813,58 @@ export default function MeetSetup() {
       ))}
 
       {/* ------------------------------------------------------------------ */}
+      {/* Password prompt - shown on Save if this browser hasn't unlocked    */}
+      {/* editing yet this session (see ADMIN_TOKEN_KEY's comment)           */}
+      {/* ------------------------------------------------------------------ */}
+      {unlockPrompt && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Enter password to save</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <p className="text-xs text-secondary">
+              Meet setup is password-protected so other computers can view live meet
+              pages without being able to change it. If no password has been set yet,
+              whatever you enter here becomes it.
+            </p>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="admin-password">Password</Label>
+              <Input
+                id="admin-password"
+                type="password"
+                value={unlockPasswordInput}
+                onChange={(e) => setUnlockPasswordInput(e.target.value)}
+                autoFocus
+              />
+            </div>
+            {unlockError && <p className="text-sm text-red-500">{unlockError}</p>}
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                disabled={unlocking || !unlockPasswordInput}
+                onClick={handleUnlockSubmit}
+              >
+                {unlocking ? 'Checking…' : 'Unlock & Save'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => { setUnlockPrompt(false); setUnlockError(null) }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
       {/* Save button                                                         */}
       {/* ------------------------------------------------------------------ */}
       <div className="flex items-center gap-3">
         <Button type="submit">Save</Button>
         {saved && <span className="text-sm text-green-600">Saved</span>}
+        {saveError && <span className="text-sm text-red-500">{saveError}</span>}
       </div>
     </form>
   )
