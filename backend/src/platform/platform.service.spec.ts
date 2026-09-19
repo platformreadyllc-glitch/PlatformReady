@@ -487,6 +487,30 @@ describe('PlatformService.cancelPlatformBreak', () => {
 
     expect(gw.emitPlatformUpdate).not.toHaveBeenCalled();
   });
+
+  it('resyncs LiftingCast to 60s before resetting its clock, not just leaving it at the break duration', async () => {
+    // Reproduces the actual bug: without the notifySetClock call, LC's own
+    // clock stayed configured at the break's duration (e.g. 600s) - its
+    // reset_clock call alone just restarts its timer at that stale value,
+    // not at whatever PlatformClock.resetToActive() just set locally.
+    const gw = makeGateway();
+    const lc = makeLc();
+    const svc = new PlatformService(gw, lc);
+    svc.ensurePlatform({ platformId: 'p1' });
+    svc.startPlatformBreak('p1', 600);
+    lc.notifySetClock.mockClear();
+
+    svc.cancelPlatformBreak('p1');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(lc.notifySetClock).toHaveBeenCalledWith('p1', 60);
+    expect(lc.notifyClockReset).toHaveBeenCalledWith('p1');
+    // Order matters - LC needs the duration corrected before it resets.
+    const setOrder = lc.notifySetClock.mock.invocationCallOrder[0];
+    const resetOrder = lc.notifyClockReset.mock.invocationCallOrder[0];
+    expect(setOrder).toBeLessThan(resetOrder);
+  });
 });
 
 describe('PlatformService.cancelGlobalBreak', () => {
@@ -560,6 +584,23 @@ describe('PlatformService.cancelGlobalBreak', () => {
     const result = svc.ensurePlatform({ platformId: 'p2' });
     expect(result.clock.mode).toBe(ClockMode.ACTIVE);
   });
+
+  it('resyncs LiftingCast to 60s for every platform, not just resetting its clock', async () => {
+    const gw = makeGateway();
+    const lc = makeLc();
+    const svc = new PlatformService(gw, lc);
+    svc.ensurePlatform({ platformId: 'p1' });
+    svc.ensurePlatform({ platformId: 'p2' });
+    svc.startGlobalBreak(600);
+    lc.notifySetClock.mockClear();
+
+    svc.cancelGlobalBreak();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(lc.notifySetClock).toHaveBeenCalledWith('p1', 60);
+    expect(lc.notifySetClock).toHaveBeenCalledWith('p2', 60);
+  });
 });
 
 describe('PlatformService.scheduleBreakReset', () => {
@@ -623,6 +664,22 @@ describe('PlatformService.scheduleBreakReset', () => {
 
     jest.advanceTimersByTime(10000);
     expect(gw.emitPlatformUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('resyncs LiftingCast to 60s when the break auto-expires, not just resetting its clock', async () => {
+    const gw = makeGateway();
+    const lc = makeLc();
+    const svc = new PlatformService(gw, lc);
+    svc.ensurePlatform({ platformId: 'p1' });
+    svc.startPlatformBreak('p1', 1);
+    lc.notifySetClock.mockClear();
+
+    jest.advanceTimersByTime(1001);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(lc.notifySetClock).toHaveBeenCalledWith('p1', 60);
+    expect(lc.notifyClockReset).toHaveBeenCalledWith('p1');
   });
 });
 
