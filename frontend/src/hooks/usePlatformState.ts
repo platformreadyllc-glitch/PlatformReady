@@ -55,7 +55,9 @@ export function usePlatformState(id: string | undefined, inputEnabled = true): P
   // ── Config from the backend-shared meet summary ──────────────────────────
   const { summary } = useMeetSummary()
   let platformName = ''
-  let dayStr = 'Day 1'
+  // Empty (not shown) for a single-day meet - "Day 1 — Jan 1" is only
+  // meaningful information once there's more than one day to distinguish.
+  let dayStr = ''
   let configFound = false
 
   if (summary) {
@@ -64,7 +66,9 @@ export function usePlatformState(id: string | undefined, inputEnabled = true): P
     if (platform?.active) {
       configFound = true
       platformName = platform.name || `Platform ${numericId}`
-      dayStr = dayLabel(summary.startDate, activeDayIndex)
+      if (summary.days.length > 1) {
+        dayStr = dayLabel(summary.startDate, activeDayIndex)
+      }
     }
   }
 
