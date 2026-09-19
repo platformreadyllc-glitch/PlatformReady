@@ -2,7 +2,9 @@ import { UnauthorizedException } from '@nestjs/common';
 import { MeetConfigService } from './meet-config.service';
 import { SaveMeetConfigDto } from './dto/save-meet-config.dto';
 
-function makeConfig(overrides: Partial<SaveMeetConfigDto> = {}): SaveMeetConfigDto {
+function makeConfig(
+  overrides: Partial<SaveMeetConfigDto> = {},
+): SaveMeetConfigDto {
   return {
     name: 'Test Meet',
     startDate: '2026-01-01',

@@ -29,7 +29,10 @@ export class MeetConfigController {
   }
 
   @Post()
-  save(@Headers(TOKEN_HEADER) token: string | undefined, @Body() dto: SaveMeetConfigDto) {
+  save(
+    @Headers(TOKEN_HEADER) token: string | undefined,
+    @Body() dto: SaveMeetConfigDto,
+  ) {
     this.meetConfig.save(token, dto);
     return { ok: true };
   }

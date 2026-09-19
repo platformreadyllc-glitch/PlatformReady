@@ -1,4 +1,10 @@
-import { IsBoolean, IsInt, IsString, Min, ValidateNested } from 'class-validator';
+import {
+  IsBoolean,
+  IsInt,
+  IsString,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { DayConfigDto } from './day-config.dto';
 
