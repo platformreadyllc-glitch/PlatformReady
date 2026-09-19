@@ -2,7 +2,20 @@ import { useEffect, useRef, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
 import type { ClockSnapshot } from '@/lib/platformTypes'
 
-export const API = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
+// Backend base URL. VITE_API_URL overrides this when set (see
+// frontend/.env.example) - needed for unusual setups (backend on a
+// non-standard port, or on a different host than the one serving this
+// frontend entirely). Otherwise, derived automatically from whatever host
+// this page was itself loaded from, on the backend's fixed port 3000
+// (backend/src/main.ts) - this is what makes "same page, any computer on
+// the LAN" work with no configuration: a browser on another computer
+// necessarily already reached this frontend via the host machine's real
+// LAN address (window.location.hostname), not literally "localhost" -
+// hardcoding that word here instead, as this used to, resolved to each
+// browser's own machine, not the host's, breaking every socket connection
+// and API call from any computer other than the host.
+const inferredApiOrigin = `${window.location.protocol}//${window.location.hostname}:3000`
+export const API = import.meta.env.VITE_API_URL ?? inferredApiOrigin
 
 // Only the fields consumed on the frontend, out of the full RemoteSerialized
 // the backend actually sends (backend/src/platform/models/remote.ts).

@@ -1,6 +1,5 @@
 import { useParams } from 'react-router-dom'
 import { PlatformDisplay } from '@/components/PlatformDisplay'
-import { KeyboardHintOverlay } from '@/components/KeyboardHintOverlay'
 import { usePlatformState } from '@/hooks/usePlatformState'
 
 export default function PlatformView() {
@@ -26,8 +25,6 @@ export default function PlatformView() {
         attemptChangeActive={attemptChangeActive}
         remoteStatus={remoteStatus}
       />
-
-      <KeyboardHintOverlay />
 
       {connected === false && (
         <div className="fixed top-3 left-1/2 -translate-x-1/2 bg-red-600 text-white text-xs font-semibold px-3 py-1 rounded-full">

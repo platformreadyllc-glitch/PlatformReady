@@ -1,6 +1,7 @@
-import { KEY_MAP, type VoteButton } from '@/lib/platformTypes'
+import { KEY_MAP, type VoteButton, type Role, type RemoteConnection } from '@/lib/platformTypes'
 
 const BUTTON_ORDER: VoteButton[] = ['white', 'red', 'blue', 'yellow']
+const ROLES: Role[] = ['left', 'chief', 'right']
 
 function buildHints(): string {
   const byButton: Record<string, string[]> = {}
@@ -15,7 +16,21 @@ function buildHints(): string {
 
 const VOTE_HINTS = buildHints()
 
-export function KeyboardHintOverlay() {
+// Only the Scoring Table view renders this at all (the referee-facing
+// Platform Display shouldn't show operator hints) - and even there, once a
+// real remote is connected for every role, no slot is actually being
+// controlled from the keyboard any more, so the hint just becomes clutter.
+// A null status (an empty slot, or a kb-* virtual remote standing in for a
+// real one - see isKbRemote()) still counts as "not connected": that slot
+// still needs the keyboard.
+export function KeyboardHintOverlay({
+  remoteStatus,
+}: {
+  remoteStatus: Record<Role, RemoteConnection | null>
+}) {
+  const allConnected = ROLES.every((role) => remoteStatus[role]?.connected === true)
+  if (allConnected) return null
+
   return (
     <div className="fixed bottom-4 right-4 bg-surface/80 border border-border rounded-lg px-4 py-3 text-xs text-secondary leading-relaxed">
       <div>{VOTE_HINTS}</div>
