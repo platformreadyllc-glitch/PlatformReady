@@ -18,6 +18,15 @@ interface LcSession {
   meetId: string;
   lcPlatformId: string;
   password: string;
+  relayUrl?: string;
+}
+
+// The relay's own CouchDB instance (see testConnection()'s comment) - same
+// host as relayUrl, always port 5984 regardless of what port (if any)
+// relayUrl itself carries.
+function relayDatabaseOrigin(relayUrl: string): string {
+  const { protocol, hostname } = new URL(relayUrl);
+  return `${protocol}//${hostname}:5984`;
 }
 
 @Injectable()
@@ -36,6 +45,7 @@ export class LiftingCastService {
       meetId: dto.meetId,
       lcPlatformId: dto.lcPlatformId,
       password: dto.password,
+      relayUrl: dto.relayUrl,
     });
   }
 
@@ -61,8 +71,9 @@ export class LiftingCastService {
         `No LiftingCast session configured for platform ${internalPlatformId}`,
       );
     }
+    const base = session.relayUrl ?? 'https://liftingcast.com';
     return {
-      baseUrl: `https://liftingcast.com/api/meets/${session.meetId}/platforms/${session.lcPlatformId}`,
+      baseUrl: `${base}/api/meets/${session.meetId}/platforms/${session.lcPlatformId}`,
       password: session.password,
     };
   }
@@ -239,10 +250,36 @@ export class LiftingCastService {
   async testConnection(
     dto: TestConnectionDto,
   ): Promise<{ success: boolean; platformName?: string; error?: string }> {
+    // A relay-configured test authenticates against the local relay's own
+    // CouchDB instance instead of the live site - same reasoning as
+    // fetchUpcomingMeets()/fetchMeetPlatforms()'s relayUrl, needed to run a
+    // meet entirely offline against a meet that only exists locally (never
+    // published to liftingcast.com). The relay (liftingcast/
+    // liftingcast-local-relay-server on GitHub - see its compose.yml) runs
+    // two separate containers: liftingcast-web (port 80 - what relayUrl
+    // itself points at; the browsable UI, and where /api/meets/... lives,
+    // same as the live site's plain liftingcast.com) and
+    // liftingcast-database (port 5984 - the actual CouchDB instance, the
+    // live site's couchdb.liftingcast.com equivalent). _session only
+    // exists on the database container - confirmed live (a 405 hitting
+    // relayUrl's port 80 directly, which has no matching POST route there).
+    let sessionUrl: string;
+    try {
+      sessionUrl = dto.relayUrl
+        ? `${relayDatabaseOrigin(dto.relayUrl)}/_session`
+        : 'https://couchdb.liftingcast.com/_session';
+    } catch {
+      // new URL() throws synchronously on a malformed relayUrl (e.g. a bare
+      // IP with no scheme, typo'd input) - DTO validation only checks it's
+      // a string, not that it parses, so this is a real, reachable path,
+      // not defensive-for-its-own-sake.
+      return { success: false, error: 'Invalid relay server address' };
+    }
+    const platformsBase = dto.relayUrl ?? 'https://liftingcast.com';
     try {
       const sessionRes = await firstValueFrom(
         this.http.post(
-          'https://couchdb.liftingcast.com/_session',
+          sessionUrl,
           `name=${encodeURIComponent(dto.meetId)}&password=${encodeURIComponent(dto.password)}`,
           {
             headers: {
@@ -274,9 +311,7 @@ export class LiftingCastService {
 
     try {
       const platformsRes = await firstValueFrom(
-        this.http.get(
-          `https://liftingcast.com/api/meets/${dto.meetId}/platforms`,
-        ),
+        this.http.get(`${platformsBase}/api/meets/${dto.meetId}/platforms`),
       );
       const platforms: LiftingCastPlatform[] = platformsRes.data?.docs ?? [];
       const matched = platforms.find((p) => p._id === dto.platformId);

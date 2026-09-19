@@ -261,6 +261,7 @@ export default function MeetSetup() {
     const day = days[dayIndex]
     const platform = day.platforms[platformIndex]
     const effectivePassword = (numDays === 1 || perDayPasswords) ? day.liftingCastPassword : password
+    const relayUrl = importSource === 'relay' && relayIp ? `http://${relayIp}` : undefined
     setTestStatus((s) => ({ ...s, [key]: 'loading' }))
     try {
       const res = await fetch('/api/liftingcast/test-connection', {
@@ -270,6 +271,7 @@ export default function MeetSetup() {
           meetId: day.liftingCastMeetId,
           platformId: platform.liftingCastPlatformId,
           password: effectivePassword,
+          relayUrl,
         }),
       })
       if (!res.ok) throw new Error(`Server error ${res.status}`)
@@ -287,6 +289,7 @@ export default function MeetSetup() {
             meetId: day.liftingCastMeetId,
             lcPlatformId: platform.liftingCastPlatformId,
             password: effectivePassword,
+            relayUrl,
           }),
         })
           .then((r) => {
