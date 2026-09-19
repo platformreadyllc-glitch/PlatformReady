@@ -57,7 +57,7 @@ export function PlatformDisplay({
             )}
           </div>
         </div>
-        <span className="text-[1.2vw] text-secondary">{dayStr}</span>
+        {dayStr && <span className="text-[1.2vw] text-secondary">{dayStr}</span>}
       </header>
 
       {clock.mode === 'ACTIVE' ? (
