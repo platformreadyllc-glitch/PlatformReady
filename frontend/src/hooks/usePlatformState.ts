@@ -1,15 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { dayLabel, readActiveDayState } from '@/lib/platformHelpers'
+import { dayLabel, platformAtIndex } from '@/lib/platformHelpers'
+import { useMeetSummary } from '@/hooks/useMeetSummary'
 import {
   INITIAL_CLOCK,
   INITIAL_VOTES,
   KEY_MAP,
   OPENER_LOCK_CUTOFF,
-  STORAGE_KEY,
   isKbRemote,
   type ClockSnapshot,
   type Role,
-  type StoredMeetConfig,
   type VoteButton,
   type RemoteConnection,
 } from '@/lib/platformTypes'
@@ -53,25 +52,20 @@ export function usePlatformState(id: string | undefined, inputEnabled = true): P
   const platformId = BACKEND_URL_ID(numericId)
   const platformIndex = Number(numericId) - 1
 
-  // ── Config from localStorage ─────────────────────────────────────────────
+  // ── Config from the backend-shared meet summary ──────────────────────────
+  const { summary } = useMeetSummary()
   let platformName = ''
   let dayStr = 'Day 1'
   let configFound = false
 
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const config: StoredMeetConfig = JSON.parse(raw)
-      const activeDayIndex = readActiveDayState().index
-      const platform = config.days[activeDayIndex]?.platforms[platformIndex]
-      if (platform?.active) {
-        configFound = true
-        platformName = platform.name || `Platform ${numericId}`
-        dayStr = dayLabel(config.startDate, activeDayIndex)
-      }
+  if (summary) {
+    const activeDayIndex = summary.activeDayIndex
+    const platform = platformAtIndex(summary, activeDayIndex, platformIndex)
+    if (platform?.active) {
+      configFound = true
+      platformName = platform.name || `Platform ${numericId}`
+      dayStr = dayLabel(summary.startDate, activeDayIndex)
     }
-  } catch {
-    // ignore malformed data
   }
 
   // ── Backend state via WebSocket ───────────────────────────────────────────
