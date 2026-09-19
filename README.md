@@ -130,6 +130,36 @@ If you have multiple platforms, replace `/platform/1` with `/platform/2`, `/plat
 
 ---
 
+## Using it from other computers on the same network
+
+A real meet needs more than one screen — a platform display on a TV, a scoring
+table, a director's laptop — usually each on its own computer. Only one
+computer needs to run the backend and frontend servers (above); every other
+computer just opens a browser to that computer's address instead of
+`localhost`.
+
+1. On the **host computer** (the one running both `npm run start:dev` and
+   `npm run dev`), find its LAN IP address:
+   - **Mac**: System Settings → Wi-Fi/Network → look for an address like
+     `192.168.x.x`, or run `ifconfig | grep "inet "` in Terminal.
+   - **Windows**: run `ipconfig` in Command Prompt and look for "IPv4
+     Address".
+2. On **any other computer** on the same network, open a browser to that
+   address instead of `localhost`, e.g. `http://192.168.0.199:5173`.
+
+That's it — no other configuration needed. The frontend automatically talks
+back to the host computer's backend (port 3000), because it derives that
+address from whatever host you used to reach the page in the first place,
+rather than assuming `localhost`.
+
+This only works on the same local network (e.g. the same venue's Wi-Fi) —
+it doesn't expose the app to the internet. If the backend ever needs to run
+on a different machine than the frontend, or on a non-standard port, set
+`VITE_API_URL` in `frontend/.env` (copy `frontend/.env.example` to start) to
+override the automatic address.
+
+---
+
 ## Stopping the app
 
 To stop either server, click into the terminal window running it and press **Ctrl + C**.
