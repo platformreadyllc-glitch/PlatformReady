@@ -1,7 +1,9 @@
+import { useEffect } from 'react'
 import { Monitor, Moon, Sun } from 'lucide-react'
 import { BrowserRouter, NavLink, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { useTheme, THEMES, type Theme } from '@/hooks/useTheme'
-import { readActivePlatforms } from '@/lib/platformHelpers'
+import { useMeetSummary } from '@/hooks/useMeetSummary'
+import { activePlatformsForDay } from '@/lib/platformHelpers'
 import MeetSetup from '@/pages/MeetSetup'
 import PlatformView from '@/pages/PlatformView'
 import ScoreTableView from '@/pages/ScoreTableView'
@@ -30,10 +32,17 @@ const indentedNavLinkClass = ({ isActive }: { isActive: boolean }) =>
 
 function Layout() {
   const { theme, cycleTheme } = useTheme()
-  // Re-read platforms on every navigation so the nav stays in sync after
-  // the user saves a new config on MeetSetup.
-  useLocation()
-  const activePlatforms = readActivePlatforms()
+  // Re-fetch the meet summary on every navigation so the nav stays in sync
+  // after the user saves a new config on MeetSetup - same reasoning as the
+  // old localStorage version, just now a network refresh instead of a
+  // synchronous re-read.
+  const location = useLocation()
+  const { summary, refresh } = useMeetSummary()
+  useEffect(() => {
+    refresh()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname])
+  const activePlatforms = activePlatformsForDay(summary, summary?.activeDayIndex ?? 0)
 
   return (
     <div className="flex h-screen bg-background">
